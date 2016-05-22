@@ -146,7 +146,7 @@ init()
 		     sizeof(normals), normals );
 
     // Load shaders and use the resulting shader program
-    GLuint program = InitShader( "vshader56.glsl", "fshader56.glsl" );
+    GLuint program = InitShader( "vshader.glsl", "fshader.glsl" );
     glUseProgram( program );
 
     // set up vertex arrays
