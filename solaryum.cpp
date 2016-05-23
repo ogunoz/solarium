@@ -110,9 +110,6 @@ tetrahedron( int count, int rank )
 	divide_triangle( v[0], v[3], v[1], count, rank );
 	divide_triangle( v[0], v[2], v[3], count, rank );
 
-
-
-
 }
 
 void createPlanet(double radius, double distanceFromSun, int rank, const char* textureName){
@@ -212,22 +209,7 @@ init()
 		glBufferSubData( GL_ARRAY_BUFFER, offset, sizeof(point[i]), point[i] );
 		offset += sizeof(point[i]);
 	}
-	mat4 mm[NumPlanet];
 
-	for(int k = 0; k < NumPlanet; k++){
-
-
-		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, width[k], height[k] , 0, GL_RGB, GL_UNSIGNED_BYTE, imageGeneral[k]);
-
-		glGenerateMipmap(GL_TEXTURE_2D);
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST_MIPMAP_LINEAR);
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-		glActiveTexture( GL_TEXTURE0);
-
-	}
 
 	// Load shaders and use the resulting shader program
 	GLuint program = InitShader( "vshader.glsl", "fshader.glsl" );
@@ -306,7 +288,7 @@ display( void )
 				RotateX(Theta[Xaxis]) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) *    modelView[k]; //global rotate
 
 		glUniformMatrix4fv(ModelView, 1, GL_TRUE, mm[k]);
-		/*
+
 		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, width[k], height[k] , 0, GL_RGB, GL_UNSIGNED_BYTE, imageGeneral[k]);
 
 		glGenerateMipmap(GL_TEXTURE_2D);
@@ -315,7 +297,7 @@ display( void )
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST_MIPMAP_LINEAR);
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-		glActiveTexture( GL_TEXTURE0);*/
+		glActiveTexture( GL_TEXTURE0);
 
 		//  glUniformMatrix4fv(CameraView, 1, GL_TRUE, view);
 		glPolygonMode(GL_FRONT, GL_FILL);
