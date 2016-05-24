@@ -1,5 +1,4 @@
 #include <iostream>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
@@ -35,13 +34,17 @@ enum { Xaxis = 0,
 	Zaxis = 2,
 	NumAxes = 3 };
 int Axis = Xaxis;
-GLfloat Theta[NumAxes] = { 15, 30.0, 0 };
+GLfloat Theta[NumAxes] = { -90, 0, 0 };
 
-double zoomFactor = 0.1;
+double zoomFactor = 0.03;
 // Model-view and projection matrices uniform location
 GLuint  CameraView, ModelView, Projection, Lighting;
 
 bool lighting = false;
+double sunTurn[NumPlanet];
+double ownTurn[NumPlanet];
+double inclination[NumPlanet];
+
 
 //----------------------------------------------------------------------------
 
@@ -151,7 +154,6 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 		for(int j = 0; j <he;j++){
 			for (int c = 0; c < 3; c++){
 				aByte =  fgetc(fin);
-				//cout << aByte << endl;
 				image[wi-i-1][j][c] = aByte;
 			}
 		}
@@ -184,11 +186,34 @@ init()
 	createPlanet(0.095,1.08+0.57+0.038+1,2,"venusmap.ppm");
 	createPlanet(0.1,1.08+0.57+0.038+1+1.50,3,"earthmap1k.ppm");
 	createPlanet(0.053,2.28+1.08+0.57+0.038+1+1.50,4,"mars_1k_color.ppm");
-	createPlanet(1.119,7.79+2.28+1.08+0.57+0.038+1+1.50,5,"earthmap1k.ppm");
-	createPlanet(0.940,14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,6,"earthmap1k.ppm");
+	createPlanet(1.119,7.79+2.28+1.08+0.57+0.038+1+1.50,5,"jupitermap.ppm");
+	createPlanet(0.940,14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,6,"saturn.ppm");
 	createPlanet(0.404,28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,7,"uranusmap.ppm");
 	createPlanet(0.388,45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,8,"neptunemap.ppm");
 	createPlanet(0.018,59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,9,"plutomap1k.ppm");
+
+	/*GUNES		KENDI
+	 * 0(GALAKTIK MERKEZIN ..)	28
+	 * 87.97 - 58.65
+	 * 224.7 - 243.01
+	 * 365.26 - 1
+	 * 686.98 - 1.0257
+	 * 4331.98 - 0.414
+	 * 10760.56 - 0.444
+	 * 30707.41 - 0.718
+	 * 60202.15 - 0.671
+	 * 90803.64 - 6.39
+	 */
+
+	sunTurn[0] = 0; sunTurn[1] = 87.97; sunTurn[2] = 224.7; sunTurn[3] = 365.26; sunTurn[4] = 686.98; sunTurn[5] = 4331.98;
+	sunTurn[6] = 10760.56; sunTurn[7] = 30707.41; sunTurn[8] = 60202.15; sunTurn[9] = 90803.64;
+
+	ownTurn[0] = 28; ownTurn[1] = 58.65; ownTurn[2] = 243.01; ownTurn[3] = 1; ownTurn[4] = 1.0257; ownTurn[5] = 0.414;
+	ownTurn[6] = 0.444; ownTurn[7] = 0.718; ownTurn[8] = 0.671; ownTurn[9] = 6.39;
+
+	inclination[0] = 0; inclination[1] = 0; inclination[2] = 178; inclination[3] = 23.4; inclination[4] = 25; inclination[5] = 3.08;
+	inclination[6] = 26.7; inclination[7] = 97.9; inclination[8] = 26.9; inclination[9] = 122.5;
+
 
 	// Create a vertex array object
 	GLuint vao;
@@ -232,15 +257,28 @@ init()
 
 
 	// Initialize shader lighting parameters
-	point4 light_position( 0.0, 0.0, 0.0, 0.0 );
-	color4 light_ambient( 0.2, 0.2, 0.2, 1.0 );
+	point4 light_position( 0.0, 0.0, 0.0, 1.0 );
+	color4 light_ambient( 0.5, 0.5, 0.5, 1.0 );
 	color4 light_diffuse( 1.0, 1.0, 1.0, 1.0 );
-	color4 light_specular( 1.0, 1.0, 1.0, 1.0 );
+	color4 light_specular( 0.5, 0.5, 0.5, 1.0 );
 
-	color4 material_ambient( 1.0, 0.0, 1.0, 1.0 );
+
+	/*color4 material_ambient( 1.0, 0.0, 1.0, 1.0 );
 	color4 material_diffuse( 1.0, 1.0, 0.0, 1.0 );
 	color4 material_specular( 1.0, 0.0, 1.0, 1.0 );
-	float  material_shininess = 50.0;
+
+
+	// Material properties
+Material g_SunMaterial( color4(0,0,0,1), color4(1,1,1,1), color4(1,1,1,1) );
+Material g_EarthMaterial( color4( 0.2, 0.2, 0.2, 1.0), color4( 1, 1, 1, 1), color4( 1, 1, 1, 1), color4(0, 0, 0, 1), 50 );
+Material g_MoonMaterial( color4( 0.1, 0.1, 0.1, 1.0), color4( 1, 1, 1, 1), color4( 0.2, 0.2, 0.2, 1), color4(0, 0, 0, 1), 10 );
+
+	float  material_shininess = 50.0;*/
+	color4 material_ambient = color4( 0.2, 0.2, 0.2, 1.0 );
+	color4 material_diffuse = color4( 1.0, 1.0, 1.0, 1.0 );
+	color4 material_specular = color4(1.0, 1.0, 1.0, 1.0 );
+	//color4 material_specular = color4(1.0, 1.0, 1.0, 1.0 );
+	float material_shininess = 1000;
 
 	color4 ambient_product = light_ambient * material_ambient;
 	color4 diffuse_product = light_diffuse * material_diffuse;
@@ -286,7 +324,7 @@ display( void )
 	for (int k = 0; k < NumPlanet; k++) {
 		mm[k] = Scale(zoomFactor,zoomFactor,zoomFactor) *
 
-				RotateX(Theta[Xaxis]) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) *    modelView[k]; //global rotate
+				RotateX(Theta[Xaxis] ) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) *    modelView[k] * RotateX(inclination[k] ); //* RotateY(inclination[k]); //global rotate
 
 		glUniformMatrix4fv(ModelView, 1, GL_TRUE, mm[k]);
 
@@ -320,9 +358,9 @@ reshape( int w, int h )
 	mat4  projection;
 	if (w <= h)
 		projection = Ortho(-1.0, 1.0, -1.0 * (GLfloat) h / (GLfloat) w,
-				1.0 * (GLfloat) h / (GLfloat) w, -1.0, 1.0);
+				1.0 * (GLfloat) h / (GLfloat) w, -10.0, 10.0);
 	else  projection = Ortho(-1.0* (GLfloat) w / (GLfloat) h, 1.0 *
-			(GLfloat) w / (GLfloat) h, -1.0, 1.0, -1.0, 1.0);
+			(GLfloat) w / (GLfloat) h, -1.0, 1.0, -10.0, 10.0);
 	glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
 }
 
@@ -398,7 +436,10 @@ void keyboard(unsigned char k, int x, int y)
 }
 
 void rotatePlanet(int rank, double speed){
-	modelView[rank] = RotateY(speed)*modelView[rank];
+	if (sunTurn[rank] != 0)
+		modelView[rank] = RotateZ(-1000/sunTurn[rank])*modelView[rank] * RotateZ(1000/ownTurn[rank]);
+	else
+		modelView[rank] = modelView[rank] * RotateZ(1000/ownTurn[rank]);
 	//Theta[Yaxis] += speed;
 
 
