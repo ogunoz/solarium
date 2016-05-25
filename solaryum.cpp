@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
+#include <mat.h>
 #include "Angel.h"
 using namespace std;
 
@@ -10,9 +11,24 @@ const int NumTriangles        = 4096;  // (4 faces)^(NumTimesToSubdivide + 1)
 const int NumPlanet           = 10;
 const int NumVertices         = 3 * NumTriangles * NumPlanet;
 
+GLfloat fov =  45.0f;
 
 typedef Angel::vec4 point4;
 typedef Angel::vec4 color4;
+
+float pi = 3.14159265;
+
+
+GLfloat yaw    = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right (due to how Eular angles work) so we initially rotate a bit to the left.
+GLfloat pitch  =  0.0f;
+
+vec3 cameraPos   = vec3(0.0f, 0.0f,  3.0f);
+vec3 cameraFront = vec3(0.0f, 0.0f, -1.0f);
+vec3 cameraUp    = vec3(0.0f, 1.0f,  0.0f);
+
+void reshape(int, int);
+
+mat4 cameraView;
 
 point4 points[NumVertices];
 point4 point[NumPlanet][3*NumTriangles];
@@ -21,10 +37,6 @@ vec3   normals[NumVertices];
 mat4 modelView[NumPlanet];
 GLubyte** imageGeneral; //*imageMercure;
 int width[NumPlanet], height[NumPlanet];
-
-vec3 cameraPos   = vec3(0.0f, 0.0f,  0.0f);
-vec3 cameraFront = vec3(0.0f, 0.0f,   0.0f);
-vec3 cameraUp    = vec3(0.0f, 0.0f,  0.0f);
 
 int mouseX;
 int mouseY;
@@ -220,15 +232,16 @@ init()
 
 
 	// Create a vertex array object
-	GLuint vao;
+	GLuint vao, vbo;
 	glGenVertexArrays( 1, &vao );
+	glGenBuffers(1, &vbo);
 	glBindVertexArray( vao );
 
 	GLintptr offset = 0;
 
-	GLuint buffer;
-	glGenBuffers( 1, &buffer );
-	glBindBuffer( GL_ARRAY_BUFFER, buffer );
+
+	glGenBuffers( 1, &vao );
+	glBindBuffer( GL_ARRAY_BUFFER, vbo );
 	glBufferData( GL_ARRAY_BUFFER, sizeof(points) + sizeof(normals) + sizeof(point), NULL, GL_STATIC_DRAW );
 	glBufferSubData( GL_ARRAY_BUFFER, offset, sizeof(points), points );
 	offset+= sizeof(points);
@@ -307,13 +320,14 @@ Material g_MoonMaterial( color4( 0.1, 0.1, 0.1, 1.0), color4( 1, 1, 1, 1), color
 	// Retrieve transformation uniform variable locations
 	ModelView = glGetUniformLocation( program, "ModelView" );
 	Projection = glGetUniformLocation( program, "Projection" );
-	//    CameraView = glGetUniformLocation( program, "CameraView" );
+	CameraView = glGetUniformLocation( program, "CameraView" );
 
 	glEnable( GL_DEPTH_TEST );
 	glEnable(GL_CULL_FACE); //to discard invisible faces from rendering
 	glEnable(GL_STENCIL_TEST);
 
 	glClearColor( 0.0, 0.0, 0.0, 0.0 ); /* black background */
+	glutPostRedisplay();
 }
 
 //----------------------------------------------------------------------------
@@ -330,9 +344,7 @@ display( void )
 	//traverses the model view matrix to global rotate and zoom-in features.
 
 	for (int k = 0; k < NumPlanet; k++) {
-		mm[k] = Scale(zoomFactor,zoomFactor,zoomFactor) *
-
-				RotateX(Theta[Xaxis] ) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) *    modelView[k] * RotateX(inclination[k] ); //* RotateY(inclination[k]); //global rotate
+		mm[k] =    modelView[k] * RotateX(inclination[k] ); //* RotateY(inclination[k]); //global rotate
 
 		glUniformMatrix4fv(ModelView, 1, GL_TRUE, mm[k]);
 
@@ -346,11 +358,16 @@ display( void )
 
 		glActiveTexture( GL_TEXTURE0);
 
+
 		//  glUniformMatrix4fv(CameraView, 1, GL_TRUE, view);
 		glStencilFunc(GL_ALWAYS, k+1,0);
 		glPolygonMode(GL_FRONT, GL_FILL);
 		glDrawArrays(GL_TRIANGLES, k*NumVertices / NumPlanet, NumVertices / NumPlanet);
 	}
+
+	 cameraView = LookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+	  glUniformMatrix4fv(CameraView, 1, GL_TRUE, cameraView);
+
 
 	//glFlush();
 	glutSwapBuffers();
@@ -364,13 +381,23 @@ reshape( int w, int h )
 {
 	glViewport( 0, 0, w, h );
 
+
+	GLfloat aspect;
+			if (w < h){
+				aspect = GLfloat(h)/w;
+			}
+			else{
+				aspect = GLfloat(w)/h;
+			}
+
+
+
 	mat4  projection;
-	if (w <= h)
-		projection = Ortho(-1.0, 1.0, -1.0 * (GLfloat) h / (GLfloat) w,
-				1.0 * (GLfloat) h / (GLfloat) w, -10.0, 10.0);
-	else  projection = Ortho(-1.0* (GLfloat) w / (GLfloat) h, 1.0 *
-			(GLfloat) w / (GLfloat) h, -1.0, 1.0, -10.0, 10.0);
+    projection = Perspective(fov, aspect, 1.0f, 100.0f);
 	glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
+	glutPostRedisplay();
+
+
 }
 
 //----------------------------------------------------------------------------
@@ -382,8 +409,12 @@ void mouse( int button, int state, int x, int y )
 
 	if ( state == GLUT_UP ) {
 		switch( button ) {
-		case 3:    zoomFactor *= 1.1;  break; //Scroll-up
-		case 4:    zoomFactor *= 0.9;  break; //Scroll-down
+		case 3:    fov -= 1.1;  break; //Scroll-up
+		case 4:    fov += 0.9;  break; //Scroll-down
+		 if (fov <= 1.0f)
+		        fov = 1.0f;
+		    if (fov >= 45.0f)
+		        fov = 45.0f;
 		}
 		glutPostRedisplay();
 	}
@@ -414,37 +445,50 @@ void specialKeyboard(int k, int x, int y)
 {
 	switch (k) {
 	case GLUT_KEY_LEFT:
-		Theta[Zaxis] += 3; // increase Z rotation by 3 degrees
+		yaw += 3; // increase Z rotation by 3 degrees
 		break;
 	case GLUT_KEY_RIGHT:
-		Theta[Zaxis] -= 3; // decrease Z rotation by 3 degrees
+		yaw -= 3; // decrease Z rotation by 3 degrees
 		break;
 	case GLUT_KEY_UP:
-		Theta[Xaxis] += 3; // increase X rotation by 3 degrees
+		pitch += 3; // increase X rotation by 3 degrees
 		break;
 	case GLUT_KEY_DOWN:
-		Theta[Xaxis] -= 3; // decrease X rotation by 3 degrees
+		pitch -= 3; // decrease X rotation by 3 degrees
 		break;
 
 	}
+
+
+	    // Make sure that when pitch is out of bounds, screen doesn't get flipped
+	    if (pitch > 89.0f)
+	        pitch = 89.0f;
+	    if (pitch < -89.0f)
+	        pitch = -89.0f;
+
+	    vec3 front;
+	    front.x = cos((yaw * pi ) / 180) * cos((pitch* pi ) / 180);
+	    front.y = sin((pitch* pi ) / 180);
+	    front.z = sin((yaw* pi ) / 180) * cos((pitch* pi ) / 180);
+	    cameraFront = normalize(front);
 	glutPostRedisplay();
 }
 
 void keyboard(unsigned char k, int x, int y)
 {
-	//GLfloat cameraSpeed = 0.01f;
+	GLfloat cameraSpeed = 0.01f;
 	switch (k)
 	{
-	//
-	// case 'a':   //Initialize the object to default angle.
-	//   cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;      break;
-	// case 's': //Initialize the object to default zoom value.
-	//         cameraPos -= cameraSpeed * cameraFront;
-	// break;
-	// case 'w': //Initialize the object to default zoom value.
-	//   cameraPos += cameraSpeed * cameraFront;      break;
-	//   case 'd': //Initialize the object to default zoom value.
-	//   cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed; break;
+
+	 case 'a':   //Initialize the object to default angle.
+	   cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;      break;
+	 case 's': //Initialize the object to default zoom value.
+	         cameraPos -= cameraSpeed * cameraFront;
+	 break;
+	 case 'w': //Initialize the object to default zoom value.
+	   cameraPos += cameraSpeed * cameraFront;      break;
+	   case 'd': //Initialize the object to default zoom value.
+	   cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed; break;
 	//
 	case 'l':
 		if (lighting == true) lighting = false;
