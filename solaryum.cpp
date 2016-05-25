@@ -182,8 +182,8 @@ init()
 
 	imageGeneral = (GLubyte**) malloc(sizeof(GLubyte*) * NumPlanet);
 	createPlanet(1.5,0,0, "sunmap.ppm");
-	createPlanet(0.038,0.57+0.038+1,1, "mercurymap.ppm");
-	createPlanet(0.095,1.08+0.57+0.038+1,2,"venusmap.ppm");
+	createPlanet(0.038,0.57+0.038+1+1,1, "mercurymap.ppm");
+	createPlanet(0.095,1.08+0.57+0.038+1+1,2,"venusmap.ppm");
 	createPlanet(0.1,1.08+0.57+0.038+1+1.50,3,"earthmap1k.ppm");
 	createPlanet(0.053,2.28+1.08+0.57+0.038+1+1.50,4,"mars_1k_color.ppm");
 	createPlanet(1.119,7.79+2.28+1.08+0.57+0.038+1+1.50,5,"jupitermap.ppm");
@@ -437,9 +437,9 @@ void keyboard(unsigned char k, int x, int y)
 
 void rotatePlanet(int rank, double speed){
 	if (sunTurn[rank] != 0)
-		modelView[rank] = RotateZ(-1000/sunTurn[rank])*modelView[rank] * RotateZ(1000/ownTurn[rank]);
+		modelView[rank] = RotateZ(-10/sunTurn[rank])*modelView[rank] * RotateZ(10/ownTurn[rank]);
 	else
-		modelView[rank] = modelView[rank] * RotateZ(1000/ownTurn[rank]);
+		modelView[rank] = modelView[rank] * RotateZ(10/ownTurn[rank]);
 	//Theta[Yaxis] += speed;
 
 
