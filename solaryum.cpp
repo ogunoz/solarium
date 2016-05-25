@@ -38,12 +38,13 @@ GLfloat Theta[NumAxes] = { -90, 0, 0 };
 
 double zoomFactor = 0.03;
 // Model-view and projection matrices uniform location
-GLuint  CameraView, ModelView, Projection, Lighting;
+GLuint  CameraView, ModelView, Projection, Lighting, index;
 
 bool lighting = false;
 double sunTurn[NumPlanet];
 double ownTurn[NumPlanet];
 double inclination[NumPlanet];
+double translate[NumPlanet];
 
 
 //----------------------------------------------------------------------------
@@ -120,6 +121,8 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 	localIndex = 0;
 	tetrahedron( NumTimesToSubdivide, rank );
 
+	translate[rank] = distanceFromSun;
+
 	const vec3 displacement(distanceFromSun, 0, 0); //displacement for each cube to seperate.
 	mat4 model_view;
 
@@ -131,6 +134,7 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 	fin = fopen(textureName, "rb");
 	if (fin == NULL){
 		cout << "Input file not found" << endl;
+		cout << textureName << endl;
 		return;
 	}
 	// First two lines are unnecessary
@@ -182,15 +186,15 @@ init()
 
 	imageGeneral = (GLubyte**) malloc(sizeof(GLubyte*) * NumPlanet);
 	createPlanet(1.5,0,0, "sunmap.ppm");
-	createPlanet(0.038,0.57+0.038+1+1,1, "mercurymap.ppm");
-	createPlanet(0.095,1.08+0.57+0.038+1+1,2,"venusmap.ppm");
+	createPlanet(0.038,0.57+0.038+1,1, "mercurymap.ppm");
+	createPlanet(0.095,1.08+0.57+0.038+1,2,"venusmap.ppm");
 	createPlanet(0.1,1.08+0.57+0.038+1+1.50,3,"earthmap1k.ppm");
 	createPlanet(0.053,2.28+1.08+0.57+0.038+1+1.50,4,"mars_1k_color.ppm");
 	createPlanet(1.119,7.79+2.28+1.08+0.57+0.038+1+1.50,5,"jupitermap.ppm");
 	createPlanet(0.940,14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,6,"saturn.ppm");
 	createPlanet(0.404,28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,7,"uranusmap.ppm");
 	createPlanet(0.388,45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,8,"neptunemap.ppm");
-	createPlanet(0.018,59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,9,"plutomap1k.ppm");
+	createPlanet(0.18,59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,9,"plutomap1k.ppm");
 
 	/*GUNES		KENDI
 	 * 0(GALAKTIK MERKEZIN ..)	28
@@ -307,6 +311,7 @@ Material g_MoonMaterial( color4( 0.1, 0.1, 0.1, 1.0), color4( 1, 1, 1, 1), color
 
 	glEnable( GL_DEPTH_TEST );
 	glEnable(GL_CULL_FACE); //to discard invisible faces from rendering
+	glEnable(GL_STENCIL_TEST);
 
 	glClearColor( 0.0, 0.0, 0.0, 0.0 ); /* black background */
 }
@@ -316,7 +321,10 @@ Material g_MoonMaterial( color4( 0.1, 0.1, 0.1, 1.0), color4( 1, 1, 1, 1), color
 void
 display( void )
 {
+	glClearStencil(0);
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
 	mat4 mm[NumPlanet];
 
 	//traverses the model view matrix to global rotate and zoom-in features.
@@ -339,11 +347,12 @@ display( void )
 		glActiveTexture( GL_TEXTURE0);
 
 		//  glUniformMatrix4fv(CameraView, 1, GL_TRUE, view);
+		glStencilFunc(GL_ALWAYS, k+1,0);
 		glPolygonMode(GL_FRONT, GL_FILL);
 		glDrawArrays(GL_TRIANGLES, k*NumVertices / NumPlanet, NumVertices / NumPlanet);
 	}
 
-
+	//glFlush();
 	glutSwapBuffers();
 }
 
@@ -377,6 +386,26 @@ void mouse( int button, int state, int x, int y )
 		case 4:    zoomFactor *= 0.9;  break; //Scroll-down
 		}
 		glutPostRedisplay();
+	}
+	else if ( state == GLUT_DOWN && button == GLUT_LEFT_BUTTON) {
+		y = glutGet( GLUT_WINDOW_HEIGHT ) - y;
+
+		unsigned char pixel[4];
+		glReadPixels(x, y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
+		//GLuint index;
+		index = 0;
+		if(pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0){
+			glReadPixels(x, y, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &index);
+			cout << index << endl;
+
+			double changeUnit = -translate[index-1];
+			for(int i = 0; i < NumPlanet; i++){
+				modelView[i] = Translate(changeUnit, 0, 0) * modelView[i];
+				translate[i] = changeUnit + translate[i];
+			}
+			glutPostRedisplay();
+		}
+
 	}
 
 }
@@ -430,8 +459,6 @@ void keyboard(unsigned char k, int x, int y)
 		break;
 
 	}
-
-
 	glutPostRedisplay();		// redraw the image now
 }
 
@@ -441,8 +468,6 @@ void rotatePlanet(int rank, double speed){
 	else
 		modelView[rank] = modelView[rank] * RotateZ(10/ownTurn[rank]);
 	//Theta[Yaxis] += speed;
-
-
 }
 
 void
@@ -450,8 +475,7 @@ idle( void )
 {
 
 	for(int i = 0; i < NumPlanet;i++){
-		rotatePlanet(i,i*0.05 + 0.01);
-
+			rotatePlanet(i,i*0.05 + 0.01);
 	}
 	//Theta[Yaxis] += 0.05;
 
@@ -469,11 +493,10 @@ main( int argc, char **argv )
 
 	glutInit( &argc, argv );
 	glutInitDisplayMode( GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH );
-	glutInitWindowSize( 1200, 512 );
+	glutInitWindowSize( 1600, 600 );
 	glutCreateWindow( "Sphere" );
 	glewExperimental = GL_TRUE;
 	glewInit();
-
 	init();
 
 	glutMouseFunc( mouse );// set mouse callback function for mouse
