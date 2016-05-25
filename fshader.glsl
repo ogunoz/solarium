@@ -15,6 +15,9 @@ varying  vec4 texCoord;
 
 void main() 
 { 
+	
+	vec2 longitudeLatitude = vec2((atan(texCoord.y, texCoord.x) / 3.1415926 + 1.0) * 0.5,(asin(texCoord.z) / 3.1415926 + 0.5));
+	
     if (lighting == 1){
         // Normalize the input lighting vectors
         vec3 N = normalize(fN);
@@ -38,9 +41,11 @@ void main()
 
         gl_FragColor = ambient + diffuse + specular;
         gl_FragColor.a = 1.0;
+        gl_FragColor = gl_FragColor * texture2D( texture, longitudeLatitude );
+       // gl_FragColor.a = 0.0;
 
     } else{
-        vec2 longitudeLatitude = vec2((atan(texCoord.y, texCoord.x) / 3.1415926 + 1.0) * 0.5,(asin(texCoord.z) / 3.1415926 + 0.5));
+       // vec2 longitudeLatitude = vec2((atan(texCoord.y, texCoord.x) / 3.1415926 + 1.0) * 0.5,(asin(texCoord.z) / 3.1415926 + 0.5));
     	gl_FragColor = texture2D( texture, longitudeLatitude );
     //	gl_FragColor = vec4(1,0,0,1);
     	

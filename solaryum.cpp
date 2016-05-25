@@ -14,6 +14,9 @@ const int NumVertices         = 3 * NumTriangles * NumPlanet;
 typedef Angel::vec4 point4;
 typedef Angel::vec4 color4;
 
+void timer(int p);
+void keyboard(unsigned char k, int x, int y);
+
 point4 points[NumVertices];
 point4 point[NumPlanet][3*NumTriangles];
 vec3   normals[NumVertices];
@@ -28,6 +31,9 @@ vec3 cameraUp    = vec3(0.0f, 0.0f,  0.0f);
 
 int mouseX;
 int mouseY;
+int anim_count = 0, anim = 0, lastSelection = -1;
+double changeUnit = 0;
+double lastZoom;
 
 enum { Xaxis = 0,
 	Yaxis = 1,
@@ -45,6 +51,7 @@ double sunTurn[NumPlanet];
 double ownTurn[NumPlanet];
 double inclination[NumPlanet];
 double translate[NumPlanet];
+double radiuses[NumPlanet];
 
 
 //----------------------------------------------------------------------------
@@ -122,6 +129,7 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 	tetrahedron( NumTimesToSubdivide, rank );
 
 	translate[rank] = distanceFromSun;
+	radiuses[rank] = radius;
 
 	const vec3 displacement(distanceFromSun, 0, 0); //displacement for each cube to seperate.
 	mat4 model_view;
@@ -194,7 +202,7 @@ init()
 	createPlanet(0.940,14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,6,"saturn.ppm");
 	createPlanet(0.404,28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,7,"uranusmap.ppm");
 	createPlanet(0.388,45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,8,"neptunemap.ppm");
-	createPlanet(0.18,59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,9,"plutomap1k.ppm");
+	createPlanet(0.018,59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50,9,"plutomap1k.ppm");
 
 	/*GUNES		KENDI
 	 * 0(GALAKTIK MERKEZIN ..)	28
@@ -362,6 +370,7 @@ display( void )
 void
 reshape( int w, int h )
 {
+
 	glViewport( 0, 0, w, h );
 
 	mat4  projection;
@@ -379,12 +388,12 @@ reshape( int w, int h )
 void mouse( int button, int state, int x, int y )
 {
 
-
 	if ( state == GLUT_UP ) {
 		switch( button ) {
 		case 3:    zoomFactor *= 1.1;  break; //Scroll-up
 		case 4:    zoomFactor *= 0.9;  break; //Scroll-down
 		}
+
 		glutPostRedisplay();
 	}
 	else if ( state == GLUT_DOWN && button == GLUT_LEFT_BUTTON) {
@@ -396,13 +405,20 @@ void mouse( int button, int state, int x, int y )
 		index = 0;
 		if(pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0){
 			glReadPixels(x, y, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &index);
-			cout << index << endl;
+			changeUnit = -translate[index-1];
 
-			double changeUnit = -translate[index-1];
-			for(int i = 0; i < NumPlanet; i++){
-				modelView[i] = Translate(changeUnit, 0, 0) * modelView[i];
-				translate[i] = changeUnit + translate[i];
+			int indexReal = index;
+			if (index-1 != lastSelection){
+				keyboard('*',0,0);
+				index = indexReal;
+				lastSelection = index-1;
+				zoomFactor = 0.03;
+				changeUnit = -translate[index-1];
+				anim_count = anim = 40;
+				timer(10);
+				lastZoom = zoomFactor;
 			}
+
 			glutPostRedisplay();
 		}
 
@@ -433,19 +449,55 @@ void specialKeyboard(int k, int x, int y)
 void keyboard(unsigned char k, int x, int y)
 {
 	//GLfloat cameraSpeed = 0.01f;
-	switch (k)
-	{
-	//
-	// case 'a':   //Initialize the object to default angle.
-	//   cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;      break;
-	// case 's': //Initialize the object to default zoom value.
-	//         cameraPos -= cameraSpeed * cameraFront;
-	// break;
-	// case 'w': //Initialize the object to default zoom value.
-	//   cameraPos += cameraSpeed * cameraFront;      break;
-	//   case 'd': //Initialize the object to default zoom value.
-	//   cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed; break;
-	//
+	switch (k){
+	int in;
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+	case '0':
+
+		in = k - '0';
+		if (in != lastSelection){
+			keyboard('*',0,0);
+			lastSelection = in;
+			changeUnit = -translate[in];
+			index = in+1;
+			anim_count = anim = 40;
+			timer(10);
+			lastZoom = zoomFactor;
+		}
+
+		break;
+	case '*':
+		changeUnit = -translate[lastSelection];
+		index = 1;
+
+		for(int i = 0; i < NumPlanet; i++){
+			modelView[i] = Translate(changeUnit, 0, 0) * modelView[i];
+			translate[i] = changeUnit + translate[i];
+		}
+		zoomFactor = 0.03;
+		lastZoom = zoomFactor;
+		//lastSelection = -1;
+
+		break;
+		//
+		// case 'a':   //Initialize the object to default angle.
+		//   cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;      break;
+		// case 's': //Initialize the object to default zoom value.
+		//         cameraPos -= cameraSpeed * cameraFront;
+		// break;
+		// case 'w': //Initialize the object to default zoom value.
+		//   cameraPos += cameraSpeed * cameraFront;      break;
+		//   case 'd': //Initialize the object to default zoom value.
+		//   cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed; break;
+		//
 	case 'l':
 		if (lighting == true) lighting = false;
 		else lighting = true;
@@ -475,7 +527,7 @@ idle( void )
 {
 
 	for(int i = 0; i < NumPlanet;i++){
-			rotatePlanet(i,i*0.05 + 0.01);
+		//	rotatePlanet(i,i*0.05 + 0.01);
 	}
 	//Theta[Yaxis] += 0.05;
 
@@ -484,6 +536,27 @@ idle( void )
 	 }*/
 
 	glutPostRedisplay();
+}
+
+void timer( int p ){
+	if(anim_count > 0){
+		anim_count--;
+
+		for(int i = 0; i < NumPlanet; i++){
+			modelView[i] = Translate((changeUnit/anim), 0, 0) * modelView[i];
+			translate[i] = (changeUnit/anim) + translate[i];
+		}
+		if (1 / radiuses[index-1] > lastZoom){
+			zoomFactor += (1 / radiuses[index-1] - lastZoom) / anim;
+		}
+		else{
+			zoomFactor -= (lastZoom - 1 / radiuses[index-1]) / anim;
+		}
+		glutPostRedisplay();
+		glutTimerFunc(10,timer,p);
+
+	}
+	//	zoomFactor = 1/radiuses[index-1];
 }
 
 
