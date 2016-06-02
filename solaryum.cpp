@@ -3,16 +3,29 @@
 #include <stdlib.h>
 #include <vector>
 #include "Angel.h"
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 using namespace std;
 
 const int NumTimesToSubdivide = 5;
 const int NumTriangles        = 4096;  // (4 faces)^(NumTimesToSubdivide + 1)
-const int NumPlanet           = 11;
+const int NumPlanet           = 12;
 const int NumVertices         = 3 * NumTriangles * NumPlanet;
 
 
 typedef Angel::vec4 point4;
 typedef Angel::vec4 color4;
+
+float pi = 3.14159265;
+GLfloat yaw    = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right (due to how Eular angles work) so we initially rotate a bit to the left.
+GLfloat pitch  =  0.0f;
+
+glm::vec3 cameraPos   = glm::vec3(0.0, -5.0,  5.0);
+glm::vec3 cameraFront = glm::vec3(0.0, 1.0, -1.0);
+glm::vec3 cameraUp    = glm::vec3(0.0, 1.0,  0.0);
 
 void timer(int p);
 void keyboard(unsigned char k, int x, int y);
@@ -25,15 +38,13 @@ mat4 modelView[NumPlanet];
 GLubyte** imageGeneral; //*imageMercure;
 int width[NumPlanet], height[NumPlanet];
 
-vec3 cameraPos   = vec3(0.0f, 0.0f,  0.0f);
-vec3 cameraFront = vec3(0.0f, 0.0f,   0.0f);
-vec3 cameraUp    = vec3(0.0f, 0.0f,  0.0f);
 
 int mouseX;
 int mouseY;
 int anim_count = 0, anim = 0, lastSelection = -1;
 double changeUnit = 0;
 double lastZoom;
+bool projection = false;
 
 enum { Xaxis = 0,
 	Yaxis = 1,
@@ -138,8 +149,14 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 	if (rank == 0){
 		displacement = vec3(0, 0, distanceFromSun);
 	}
+	mat4 scale;
+	if(rank == 11)
+			scale = Scale(radius*1.5, radius*1.5, radius*0.15);
+	else
+		scale = Scale(radius, radius, radius);
 
-	model_view =  Translate(displacement) * Scale(radius, radius, radius); // Scale(), Translate(), RotateX(), RotateY(), RotateZ(): user-defined functions in mat.h
+	model_view =   RotateX(inclination[rank] ) * Translate(displacement) * scale; // Scale(), Translate(), RotateX(), RotateY(), RotateZ(): user-defined functions in mat.h
+
 	modelView[rank] = model_view;
 
 	FILE *fin;
@@ -202,7 +219,19 @@ init()
 	distances[4] = 1.08+0.57+0.038+1+1.50; distances[5] = 2.28+1.08+0.57+0.038+1+1.50;
 	distances[6] = 7.79+2.28+1.08+0.57+0.038+1+1.50; distances[7] = 14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
 	distances[8] = 28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1; distances[9] = 45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
-	distances[10] = 59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
+	distances[10] = 59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50; distances[11] = distances[7];
+
+
+
+	sunTurn[0] = 0; sunTurn[1] = 0; sunTurn[2] = 87.97; sunTurn[3] = 224.7; sunTurn[4] = 365.26; sunTurn[5] = 686.98; sunTurn[6] = 4331.98;
+	sunTurn[7] = 10760.56; sunTurn[8] = 30707.41; sunTurn[9] = 60202.15; sunTurn[10] = 90803.64; sunTurn[11] = sunTurn[7];
+
+	ownTurn[0] = 0; ownTurn[1] = 28; ownTurn[2] = 58.65; ownTurn[3] = 243.01; ownTurn[4] = 1; ownTurn[5] = 1.0257; ownTurn[6] = 0.414;
+	ownTurn[7] = 0.444; ownTurn[8] = 0.718; ownTurn[9] = 0.671; ownTurn[10] = 6.39; ownTurn[11] = ownTurn[7];
+
+	inclination[0] = 0; inclination[1] = 0; inclination[2] = 0; inclination[3] = 178; inclination[4] = 23.4; inclination[5] = 25; inclination[6] = 3.08;
+	inclination[7] = 26.7; inclination[8] = 97.9; inclination[9] = 26.9; inclination[10] = 122.5; inclination[11] = inclination[7];
+
 
 	imageGeneral = (GLubyte**) malloc(sizeof(GLubyte*) * NumPlanet);
 	createPlanet(200.0, distances[0], 0, "space.ppm");
@@ -216,6 +245,7 @@ init()
 	createPlanet(0.404,distances[8],8,"uranusmap.ppm");
 	createPlanet(0.388,distances[9],9,"neptunemap.ppm");
 	createPlanet(0.018,distances[10],10,"plutomap1k.ppm");
+	createPlanet(0.940,distances[11],11,"saturnringcolor.ppm");
 
 	/*GUNES		KENDI
 	 * 0(GALAKTIK MERKEZIN ..)	28
@@ -230,14 +260,6 @@ init()
 	 * 90803.64 - 6.39
 	 */
 
-	sunTurn[0] = 0; sunTurn[1] = 0; sunTurn[2] = 87.97; sunTurn[3] = 224.7; sunTurn[4] = 365.26; sunTurn[5] = 686.98; sunTurn[6] = 4331.98;
-	sunTurn[7] = 10760.56; sunTurn[8] = 30707.41; sunTurn[9] = 60202.15; sunTurn[10] = 90803.64;
-
-	ownTurn[0] = 0; ownTurn[1] = 28; ownTurn[2] = 58.65; ownTurn[3] = 243.01; ownTurn[4] = 1; ownTurn[5] = 1.0257; ownTurn[6] = 0.414;
-	ownTurn[7] = 0.444; ownTurn[8] = 0.718; ownTurn[9] = 0.671; ownTurn[10] = 6.39;
-
-	inclination[0] = 0; inclination[1] = 0; inclination[2] = 0; inclination[3] = 178; inclination[4] = 23.4; inclination[5] = 25; inclination[6] = 3.08;
-	inclination[7] = 26.7; inclination[8] = 97.9; inclination[9] = 26.9; inclination[10] = 122.5;
 
 
 	// Create a vertex array object
@@ -327,7 +349,7 @@ Material g_MoonMaterial( color4( 0.1, 0.1, 0.1, 1.0), color4( 1, 1, 1, 1), color
 	// Retrieve transformation uniform variable locations
 	ModelView = glGetUniformLocation( program, "ModelView" );
 	Projection = glGetUniformLocation( program, "Projection" );
-	//    CameraView = glGetUniformLocation( program, "CameraView" );
+	CameraView = glGetUniformLocation( program, "CameraView" );
 
 	glEnable( GL_DEPTH_TEST );
 	glEnable(GL_CULL_FACE); //to discard invisible faces from rendering
@@ -347,19 +369,28 @@ display( void )
 
 	mat4 mm[NumPlanet];
 
-	//traverses the model view matrix to global rotate and zoom-in feature
-	cout << lastSelection << endl;
+	glm::vec3 target = cameraPos + cameraFront;
+	glm::mat4 cameraView;
 
-	//cout << translate[1] << endl;
+
+	if (projection)
+		cameraView = glm::mat4();
+	else
+		cameraView = glm::lookAt(cameraPos, target, cameraUp);
+
+	glUniformMatrix4fv(CameraView, 1, GL_FALSE, glm::value_ptr(cameraView));
+	//traverses the model view matrix to global rotate and zoom-in features.
+
+	//glUniformMatrix4fv(CameraView, 1, GL_TRUE, cameraView);
+
+	//traverses the model view matrix to global rotate and zoom-in feature
+
 	double dist = 0;
 	for(int i = 1; i <= lastSelection; i++){
 		dist+= distances[i];
 	}
 	point4 light_position( -dist*zoomFactor, 0.0, 0.0, 1.0 );
 
-
-	cout << light_position.x << endl;
-	//cout << translate[1] + radiuses[1] << endl;
 	glUniform4fv( glGetUniformLocation(program, "LightPosition"), 1, light_position );
 
 
@@ -367,13 +398,13 @@ display( void )
 	for (int k = 0; k < NumPlanet; k++) {
 		if (k != 0){
 			glStencilFunc(GL_ALWAYS, k,0);
-			mm[k] = Scale(zoomFactor,zoomFactor,zoomFactor) *
-					RotateX(Theta[Xaxis] ) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) *    modelView[k] * RotateX(inclination[k] ); //* RotateY(inclination[k]); //global rotate
+			if(projection)
+				mm[k] = Scale(zoomFactor, zoomFactor, zoomFactor) * RotateX(Theta[Xaxis]) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) * modelView[k]; //* RotateY(inclination[k]); //global rotate
+			else
+				mm[k] = modelView[k]; //* RotateY(inclination[k]); //global rotate
 		}
 		else{
-			mm[k] = Scale(0.03,0.03,0.03) * RotateX(0 ) * RotateY(0) * RotateZ(0) *
-
-					modelView[k] * RotateX(inclination[k] ); //* RotateY(inclination[k]); //global rotate
+			mm[k] = Scale(0.03, 0.03, 0.03) *modelView[k]; //* RotateY(inclination[k]); //global rotate
 		}
 		glUniformMatrix4fv(ModelView, 1, GL_TRUE, mm[k]);
 
@@ -404,15 +435,39 @@ void
 reshape( int w, int h )
 {
 
-	glViewport( 0, 0, w, h );
+	if(projection){
 
-	mat4  projection;
-	if (w <= h)
-		projection = Ortho(-1.0, 1.0, -1.0 * (GLfloat) h / (GLfloat) w,
-				1.0 * (GLfloat) h / (GLfloat) w, -10.0, 10.0);
-	else  projection = Ortho(-1.0* (GLfloat) w / (GLfloat) h, 1.0 *
-			(GLfloat) w / (GLfloat) h, -1.0, 1.0, -10.0, 10.0);
-	glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
+		glViewport( 0, 0, w, h );
+
+		mat4  projection;
+		if (w <= h)
+			projection = Ortho(-1.0, 1.0, -1.0 * (GLfloat) h / (GLfloat) w,
+					1.0 * (GLfloat) h / (GLfloat) w, -10.0, 10.0);
+		else  projection = Ortho(-1.0* (GLfloat) w / (GLfloat) h, 1.0 *
+				(GLfloat) w / (GLfloat) h, -1.0, 1.0, -10.0, 10.0);
+		glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
+	}
+	else{
+		glViewport( 0, 0, w, h );
+
+
+		GLfloat aspect;
+		if (w < h){
+			aspect = GLfloat(h)/w;
+		}
+		else{
+			aspect = GLfloat(w)/h;
+		}
+
+
+
+		mat4  projection;
+		projection = Perspective(45.0, aspect, 1.0f, 100.0f);
+		glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
+		glutPostRedisplay();
+
+	}
+
 }
 
 //----------------------------------------------------------------------------
@@ -420,11 +475,21 @@ reshape( int w, int h )
 //Mouse callback function.
 void mouse( int button, int state, int x, int y )
 {
-
+	GLfloat cameraSpeed = 0.1f;
 	if ( state == GLUT_UP ) {
 		switch( button ) {
-		case 3:    zoomFactor *= 1.1;  break; //Scroll-up
-		case 4:    zoomFactor *= 0.9;  break; //Scroll-down
+		case 3:
+			if(projection)
+				zoomFactor *= 1.1;
+			else
+				cameraPos += cameraSpeed * cameraFront;
+			break; //Scroll-up
+		case 4:
+			if(projection)
+				zoomFactor *= 0.9;
+			else
+				cameraPos -= cameraSpeed * cameraFront;
+			break; //Scroll-down
 		}
 
 		glutPostRedisplay();
@@ -440,7 +505,18 @@ void mouse( int button, int state, int x, int y )
 			glReadPixels(x, y, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &index);
 			changeUnit = -translate[index-1];
 
+
+			if(index == 11)
+				index = 7;
 			int indexReal = index;
+
+
+			for(int i = 1; i < NumPlanet; i++){
+			//	modelView[i] =  modelView[i] * Translate(distances[index],0,0);
+			}
+
+
+
 			if (index != lastSelection){
 				keyboard('*',0,0);
 				index = indexReal;
@@ -482,27 +558,29 @@ void mouse( int button, int state, int x, int y )
 void specialKeyboard(int k, int x, int y)
 
 {
-	switch (k) {
-	case GLUT_KEY_LEFT:
-		Theta[Zaxis] += 3; // increase Z rotation by 3 degrees
-		break;
-	case GLUT_KEY_RIGHT:
-		Theta[Zaxis] -= 3; // decrease Z rotation by 3 degrees
-		break;
-	case GLUT_KEY_UP:
-		Theta[Xaxis] += 3; // increase X rotation by 3 degrees
-		break;
-	case GLUT_KEY_DOWN:
-		Theta[Xaxis] -= 3; // decrease X rotation by 3 degrees
-		break;
+	if(projection){
+		switch (k) {
+		case GLUT_KEY_LEFT:
+			Theta[Zaxis] += 3; // increase Z rotation by 3 degrees
+			break;
+		case GLUT_KEY_RIGHT:
+			Theta[Zaxis] -= 3; // decrease Z rotation by 3 degrees
+			break;
+		case GLUT_KEY_UP:
+			Theta[Xaxis] += 3; // increase X rotation by 3 degrees
+			break;
+		case GLUT_KEY_DOWN:
+			Theta[Xaxis] -= 3; // decrease X rotation by 3 degrees
+			break;
 
+		}
+		glutPostRedisplay();
 	}
-	glutPostRedisplay();
 }
 
 void keyboard(unsigned char k, int x, int y)
 {
-	//GLfloat cameraSpeed = 0.01f;
+	GLfloat cameraSpeed = 1;
 	switch (k){
 	int in;
 	case '1':
@@ -544,16 +622,20 @@ void keyboard(unsigned char k, int x, int y)
 
 		break;
 		//
-		// case 'a':   //Initialize the object to default angle.
-		//   cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;      break;
-		// case 's': //Initialize the object to default zoom value.
-		//         cameraPos -= cameraSpeed * cameraFront;
-		// break;
-		// case 'w': //Initialize the object to default zoom value.
-		//   cameraPos += cameraSpeed * cameraFront;      break;
-		//   case 'd': //Initialize the object to default zoom value.
-		//   cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed; break;
-		//
+	case 'n':
+		projection = !projection;
+		reshape(glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT));
+
+		break;
+	case 'a':   //Initialize the object to default angle.
+		cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;      break;
+	case 's': //Initialize the object to default zoom value.
+		cameraPos.y -= cameraSpeed;
+		break;
+	case 'w': //Initialize the object to default zoom value.
+		cameraPos.y +=  cameraSpeed;      break;
+	case 'd': //Initialize the object to default zoom value.
+		cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed; break;
 	case 'l':
 		if (lighting == true) lighting = false;
 		else lighting = true;
@@ -571,8 +653,8 @@ void keyboard(unsigned char k, int x, int y)
 }
 
 void rotatePlanet(int rank, double speed){
-	if (sunTurn[rank] != 0)
-		modelView[rank] = RotateZ(-100/sunTurn[rank])*modelView[rank] * RotateZ(100/ownTurn[rank]);
+	if (rank != 1)
+		modelView[rank] =  RotateZ(-100/sunTurn[rank])*modelView[rank] * RotateZ(100/ownTurn[rank]);
 	else
 		modelView[rank] = modelView[rank] * RotateZ(100/ownTurn[rank]);
 	//Theta[Yaxis] += speed;
@@ -582,7 +664,7 @@ void
 idle( void ){
 
 	for(int i = 1; i < NumPlanet;i++){
-		//	rotatePlanet(i,i*0.05 + 0.01);
+		rotatePlanet(i,i*0.05 + 0.01);
 	}
 	//Theta[Yaxis] += 0.05;
 
@@ -615,6 +697,7 @@ void timer( int p ){
 }
 
 
+
 int
 main( int argc, char **argv )
 {
@@ -641,3 +724,4 @@ main( int argc, char **argv )
 	free(imageGeneral);
 	return 0;
 }
+
