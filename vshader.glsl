@@ -1,7 +1,7 @@
 attribute   vec4 vPosition;
 attribute   vec3 vNormal;
 
-// output values will be interpretated per-fragment
+// output values that will be interpretated per-fragment
 varying  vec3 fN;
 varying  vec3 fE;
 varying  vec3 fL;

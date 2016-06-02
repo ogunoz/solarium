@@ -7,7 +7,7 @@ using namespace std;
 
 const int NumTimesToSubdivide = 5;
 const int NumTriangles        = 4096;  // (4 faces)^(NumTimesToSubdivide + 1)
-const int NumPlanet           = 11;
+const int NumPlanet           = 12;
 const int NumVertices         = 3 * NumTriangles * NumPlanet;
 
 
@@ -135,11 +135,18 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 	vec3 displacement(distanceFromSun, 0, 0); //displacement for each cube to seperate.
 	mat4 model_view;
 
-	if (rank == 0){
-		displacement = vec3(0, 0, distanceFromSun);
+	if (rank == 0 || rank == 11){
+		//displacement = vec3(distanceFromSun, distanceFromSun, 0);
 	}
+	mat4 scale;
+	if(rank == 11){
+			scale = Scale(radius*1.5, radius*1.5, radius*0.15) ;;
+		}
+	else{
+		scale = Scale(radius, radius, radius);
+	}
+	model_view =   RotateX(inclination[rank] ) * Translate(displacement) * scale; // Scale(), Translate(), RotateX(), RotateY(), RotateZ(): user-defined functions in mat.h
 
-	model_view =  Translate(displacement) * Scale(radius, radius, radius); // Scale(), Translate(), RotateX(), RotateY(), RotateZ(): user-defined functions in mat.h
 	modelView[rank] = model_view;
 
 	FILE *fin;
@@ -203,6 +210,16 @@ init()
 	distances[6] = 7.79+2.28+1.08+0.57+0.038+1+1.50; distances[7] = 14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
 	distances[8] = 28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1; distances[9] = 45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
 	distances[10] = 59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
+	distances[11] = distances[7];
+
+	sunTurn[0] = 0; sunTurn[1] = 0; sunTurn[2] = 87.97; sunTurn[3] = 224.7; sunTurn[4] = 365.26; sunTurn[5] = 686.98; sunTurn[6] = 4331.98;
+	sunTurn[7] = 10760.56; sunTurn[8] = 30707.41; sunTurn[9] = 60202.15; sunTurn[10] = 90803.64; sunTurn[11] = sunTurn[7];
+
+	ownTurn[0] = 0; ownTurn[1] = 28; ownTurn[2] = 58.65; ownTurn[3] = 243.01; ownTurn[4] = 1; ownTurn[5] = 1.0257; ownTurn[6] = 0.414;
+	ownTurn[7] = 0.444; ownTurn[8] = 0.718; ownTurn[9] = 0.671; ownTurn[10] = 6.39; ownTurn[11] = ownTurn[7];
+
+	inclination[0] = 0; inclination[1] = 0; inclination[2] = 0; inclination[3] = 178; inclination[4] = 23.4; inclination[5] = 25; inclination[6] = 3.08;
+	inclination[7] = 26.7; inclination[8] = 97.9; inclination[9] = 26.9; inclination[10] = 122.5; inclination[11] = 26.7;
 
 	imageGeneral = (GLubyte**) malloc(sizeof(GLubyte*) * NumPlanet);
 	createPlanet(200.0, distances[0], 0, "space.ppm");
@@ -216,6 +233,8 @@ init()
 	createPlanet(0.404,distances[8],8,"uranusmap.ppm");
 	createPlanet(0.388,distances[9],9,"neptunemap.ppm");
 	createPlanet(0.018,distances[10],10,"plutomap1k.ppm");
+	createPlanet(0.940,distances[11],11,"saturnringcolor.ppm");
+
 
 	/*GUNES		KENDI
 	 * 0(GALAKTIK MERKEZIN ..)	28
@@ -230,14 +249,6 @@ init()
 	 * 90803.64 - 6.39
 	 */
 
-	sunTurn[0] = 0; sunTurn[1] = 0; sunTurn[2] = 87.97; sunTurn[3] = 224.7; sunTurn[4] = 365.26; sunTurn[5] = 686.98; sunTurn[6] = 4331.98;
-	sunTurn[7] = 10760.56; sunTurn[8] = 30707.41; sunTurn[9] = 60202.15; sunTurn[10] = 90803.64;
-
-	ownTurn[0] = 0; ownTurn[1] = 28; ownTurn[2] = 58.65; ownTurn[3] = 243.01; ownTurn[4] = 1; ownTurn[5] = 1.0257; ownTurn[6] = 0.414;
-	ownTurn[7] = 0.444; ownTurn[8] = 0.718; ownTurn[9] = 0.671; ownTurn[10] = 6.39;
-
-	inclination[0] = 0; inclination[1] = 0; inclination[2] = 0; inclination[3] = 178; inclination[4] = 23.4; inclination[5] = 25; inclination[6] = 3.08;
-	inclination[7] = 26.7; inclination[8] = 97.9; inclination[9] = 26.9; inclination[10] = 122.5;
 
 
 	// Create a vertex array object
@@ -365,10 +376,14 @@ display( void )
 
 
 	for (int k = 0; k < NumPlanet; k++) {
+		glUniform1i( glGetUniformLocation(program, "isSun"), 0 );
+		if(k == 1){
+			glUniform1i( glGetUniformLocation(program, "isSun"), 1 );
+		}
 		if (k != 0){
 			glStencilFunc(GL_ALWAYS, k,0);
 			mm[k] = Scale(zoomFactor,zoomFactor,zoomFactor) *
-					RotateX(Theta[Xaxis] ) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) *    modelView[k] * RotateX(inclination[k] ); //* RotateY(inclination[k]); //global rotate
+					RotateX(Theta[Xaxis] ) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) *    modelView[k]; //* RotateY(inclination[k]); //global rotate
 		}
 		else{
 			mm[k] = Scale(0.03,0.03,0.03) * RotateX(0 ) * RotateY(0) * RotateZ(0) *

@@ -7,6 +7,7 @@ uniform vec4 AmbientProduct, DiffuseProduct, SpecularProduct;
 uniform mat4 ModelView;
 uniform vec4 LightPosition;
 uniform float Shininess;
+uniform int isSun;
 
 uniform int lighting;
 
@@ -42,6 +43,9 @@ void main()
         gl_FragColor = ambient + diffuse + specular;
         gl_FragColor.a = 1.0;
         gl_FragColor = gl_FragColor * texture2D( texture, longitudeLatitude );
+        if(isSun == 1){
+        gl_FragColor = texture2D( texture, longitudeLatitude );
+        }
        // gl_FragColor.a = 0.0;
 
     } else{
