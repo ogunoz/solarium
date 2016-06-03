@@ -12,7 +12,7 @@ using namespace std;
 
 const int NumTimesToSubdivide = 5;
 const int NumTriangles        = 4096;  // (4 faces)^(NumTimesToSubdivide + 1)
-const int NumPlanet           = 12;
+const int NumPlanet           = 13;
 const int NumVertices         = 3 * NumTriangles * NumPlanet;
 
 
@@ -41,7 +41,7 @@ int width[NumPlanet], height[NumPlanet];
 
 int mouseX;
 int mouseY;
-int anim_count = 0, anim = 0, lastSelection = -1;
+int anim_count = 0, anim = 0, lastSelection = 1;
 double changeUnit = 0;
 double lastZoom;
 bool projection = false;
@@ -146,17 +146,14 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 	vec3 displacement(distanceFromSun, 0, 0); //displacement for each cube to seperate.
 	mat4 model_view;
 
-	if (rank == 0 || rank == 11){
-		//displacement = vec3(distanceFromSun, distanceFromSun, 0);
-	}
-	mat4 scale;
+	if (rank == 0)
+		displacement = vec3(1000, 1000, distanceFromSun);
 
-	if(rank == 11){
-			scale = Scale(radius*1.5, radius*1.5, radius*0.15) ;;
-		}
-	else{
+	mat4 scale;
+	if(rank == 11)
+		scale = Scale(radius*1.5, radius*1.5, radius*0.15);
+	else
 		scale = Scale(radius, radius, radius);
-	}
 
 	model_view =   RotateX(inclination[rank] ) * Translate(displacement) * scale; // Scale(), Translate(), RotateX(), RotateY(), RotateZ(): user-defined functions in mat.h
 
@@ -218,39 +215,42 @@ init()
 {
 
 
-	distances[0] = -450; distances[1] = 0; distances[2] = 0.57+0.038+1; distances[3] = 1.08+0.57+0.038+1;
+	distances[0] = -4000; distances[1] = 0; distances[2] = 0.57+0.038+1; distances[3] = 1.08+0.57+0.038+1;
 	distances[4] = 1.08+0.57+0.038+1+1.50; distances[5] = 2.28+1.08+0.57+0.038+1+1.50;
 	distances[6] = 7.79+2.28+1.08+0.57+0.038+1+1.50; distances[7] = 14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
 	distances[8] = 28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1; distances[9] = 45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
-
-	distances[10] = 59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50; distances[11] = distances[7];
+	distances[10] = 59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50; distances[11] = distances[7]; distances[12] = 1.08+0.57+0.038+1+1.50 + 0.1 + 0.2;
 
 
 
 	sunTurn[0] = 0; sunTurn[1] = 0; sunTurn[2] = 87.97; sunTurn[3] = 224.7; sunTurn[4] = 365.26; sunTurn[5] = 686.98; sunTurn[6] = 4331.98;
-	sunTurn[7] = 10760.56; sunTurn[8] = 30707.41; sunTurn[9] = 60202.15; sunTurn[10] = 90803.64; sunTurn[11] = sunTurn[7];
+	sunTurn[7] = 10760.56; sunTurn[8] = 30707.41; sunTurn[9] = 60202.15; sunTurn[10] = 90803.64; sunTurn[11] = sunTurn[7]; sunTurn[12] = sunTurn[4];
 
 	ownTurn[0] = 0; ownTurn[1] = 28; ownTurn[2] = 58.65; ownTurn[3] = 243.01; ownTurn[4] = 1; ownTurn[5] = 1.0257; ownTurn[6] = 0.414;
-	ownTurn[7] = 0.444; ownTurn[8] = 0.718; ownTurn[9] = 0.671; ownTurn[10] = 6.39; ownTurn[11] = ownTurn[7];
+	ownTurn[7] = 0.444; ownTurn[8] = 0.718; ownTurn[9] = 0.671; ownTurn[10] = 6.39; ownTurn[11] = ownTurn[7]; ownTurn[12] = 27.32;
 
 	inclination[0] = 0; inclination[1] = 0; inclination[2] = 0; inclination[3] = 178; inclination[4] = 23.4; inclination[5] = 25; inclination[6] = 3.08;
-
-	inclination[7] = 26.7; inclination[8] = 97.9; inclination[9] = 26.9; inclination[10] = 122.5; inclination[11] = inclination[7];
+	inclination[7] = 26.7; inclination[8] = 97.9; inclination[9] = 26.9; inclination[10] = 122.5; inclination[11] = inclination[7]; inclination[12] = 0;
 
 
 	imageGeneral = (GLubyte**) malloc(sizeof(GLubyte*) * NumPlanet);
-	createPlanet(200.0, distances[0], 0, "space.ppm");
+	createPlanet(3000.0, distances[0], 0, "space.ppm");
 	createPlanet(1.5,  distances[1],1, "sunmap.ppm");
 	createPlanet(0.038,distances[2],2, "mercurymap.ppm");
 	createPlanet(0.095,distances[3],3,"venusmap.ppm");
 	createPlanet(0.1,distances[4],4,"earthmap1k.ppm");
+
+
+
 	createPlanet(0.053,distances[5],5,"mars_1k_color.ppm");
 	createPlanet(1.119,distances[6],6,"jupitermap.ppm");
 	createPlanet(0.940,distances[7],7,"saturn.ppm");
 	createPlanet(0.404,distances[8],8,"uranusmap.ppm");
 	createPlanet(0.388,distances[9],9,"neptunemap.ppm");
 	createPlanet(0.018,distances[10],10,"plutomap1k.ppm");
-	createPlanet(0.940,distances[11],11,"saturnringcolor.ppm");
+	createPlanet(0.940,distances[11],11,"saturnring.ppm");
+
+	createPlanet(0.027,distances[12],12,"MOON.ppm");
 
 	/*GUNES		KENDI
 	 * 0(GALAKTIK MERKEZIN ..)	28
@@ -402,12 +402,11 @@ display( void )
 
 	for (int k = 0; k < NumPlanet; k++) {
 		glUniform1i( glGetUniformLocation(program, "isSun"), 0 );
-		if(k == 1){
+		if(k == 1)
 			glUniform1i( glGetUniformLocation(program, "isSun"), 1 );
-		}
+
 		if (k != 0){
 			glStencilFunc(GL_ALWAYS, k,0);
-
 			if(projection)
 				mm[k] = Scale(zoomFactor, zoomFactor, zoomFactor) * RotateX(Theta[Xaxis]) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) * modelView[k]; //* RotateY(inclination[k]); //global rotate
 			else
@@ -491,14 +490,17 @@ void mouse( int button, int state, int x, int y )
 		case 3:
 			if(projection)
 				zoomFactor *= 1.1;
-			else
+			else{
 				cameraPos += cameraSpeed * cameraFront;
+			}
 			break; //Scroll-up
 		case 4:
 			if(projection)
 				zoomFactor *= 0.9;
-			else
+			else{
 				cameraPos -= cameraSpeed * cameraFront;
+
+			}
 			break; //Scroll-down
 		}
 
@@ -511,18 +513,22 @@ void mouse( int button, int state, int x, int y )
 		glReadPixels(x, y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
 		//GLuint index;
 		index = 0;
+
+
 		if(pixel[0] != pixel[1] || pixel[1] != pixel[2]){
 			glReadPixels(x, y, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &index);
 			changeUnit = -translate[index-1];
 
+			cout << index << endl;
 
 			if(index == 11)
 				index = 7;
 			int indexReal = index;
 
 
+
 			for(int i = 1; i < NumPlanet; i++){
-			//	modelView[i] =  modelView[i] * Translate(distances[index],0,0);
+				//	modelView[i] =  modelView[i] * Translate(distances[index],0,0);
 			}
 
 
@@ -590,7 +596,10 @@ void specialKeyboard(int k, int x, int y)
 
 void keyboard(unsigned char k, int x, int y)
 {
-	GLfloat cameraSpeed = 1;
+	GLfloat cameraSpeed = 2;
+	vec3 displacement;
+	mat4 model_view;
+
 	switch (k){
 	int in;
 	case '1':
@@ -614,7 +623,6 @@ void keyboard(unsigned char k, int x, int y)
 			timer(10);
 			lastZoom = zoomFactor;
 
-
 		}
 
 		break;
@@ -636,16 +644,38 @@ void keyboard(unsigned char k, int x, int y)
 		projection = !projection;
 		reshape(glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT));
 
+		if(projection){
+			displacement = vec3(0, 0, -450);
+			model_view =   RotateX(inclination[0] ) * Translate(displacement) * Scale(200, 200, 200);
+		}
+		else{
+			displacement = vec3(1000, 1000, -4000);
+			model_view =   RotateX(inclination[0] ) * Translate(displacement) * Scale(3000, 3000, 3000);
+		}
+		// Scale(), Translate(), RotateX(), RotateY(), RotateZ(): user-defined functions in mat.h
+
+		modelView[0] = model_view;
+
+
+
 		break;
 	case 'a':   //Initialize the object to default angle.
-		cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;      break;
+		cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
+		modelView[0] = modelView[0] * Translate(0.0111111 * -cameraSpeed,0,0);
+		break;
 	case 's': //Initialize the object to default zoom value.
 		cameraPos.y -= cameraSpeed;
+		modelView[0] = modelView[0] * Translate(0,0.0111111 * -cameraSpeed,0);
 		break;
 	case 'w': //Initialize the object to default zoom value.
-		cameraPos.y +=  cameraSpeed;      break;
+		cameraPos.y +=  cameraSpeed;
+		modelView[0] = modelView[0] * Translate(0,0.0111111 * cameraSpeed,0);
+
+		break;
 	case 'd': //Initialize the object to default zoom value.
-		cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed; break;
+		cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
+		modelView[0] = modelView[0] * Translate(0.0111111 * cameraSpeed,0,0);
+		break;
 	case 'l':
 		if (lighting == true) lighting = false;
 		else lighting = true;
@@ -662,9 +692,11 @@ void keyboard(unsigned char k, int x, int y)
 	glutPostRedisplay();		// redraw the image now
 }
 
-void rotatePlanet(int rank, double speed){
-	if (rank != 1)
+void rotatePlanet(int rank){
+	if (rank != 1 && lastSelection == 1){
 		modelView[rank] =  RotateZ(-100/sunTurn[rank])*modelView[rank] * RotateZ(100/ownTurn[rank]);
+
+	}
 	else
 		modelView[rank] = modelView[rank] * RotateZ(100/ownTurn[rank]);
 	//Theta[Yaxis] += speed;
@@ -673,14 +705,8 @@ void rotatePlanet(int rank, double speed){
 void
 idle( void ){
 
-	for(int i = 1; i < NumPlanet;i++){
-		rotatePlanet(i,i*0.05 + 0.01);
-	}
-	//Theta[Yaxis] += 0.05;
-
-	/* for(int i = 0; i < NumPlanet;i++){
-		 modelView[i] =
-	 }*/
+	for(int i = 1; i < NumPlanet;i++)
+		//rotatePlanet(i);
 
 	glutPostRedisplay();
 }
@@ -734,4 +760,3 @@ main( int argc, char **argv )
 	free(imageGeneral);
 	return 0;
 }
-
