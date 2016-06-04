@@ -11,15 +11,17 @@ uniform vec4 LightPosition;
 uniform mat4 Projection;
 uniform mat4 CameraView;
 
+uniform int isSpace;
+
 
 uniform int lighting;
 
-attribute vec4 vTexCoord;
 varying vec4 texCoord;
+varying vec4 color;
 
 void main()
 {
-    if (lighting == 1){
+    if (lighting == 1 && isSpace == 0){
    
         fN = (ModelView*vec4(vNormal, 0.0)).xyz; // normal direction in camera coordinates
 
@@ -32,6 +34,17 @@ void main()
         }
     }
 
-    gl_Position = Projection*CameraView*ModelView*vPosition;
-    texCoord = vTexCoord;
+   color = vec4(0.0, 0.0, 1.0, 1.0);
+    if (isSpace == 1){
+    	texCoord = vPosition;
+    	color = vec4(0.0,1.0,0.0,1.0);
+    	
+    	gl_Position = ModelView*vPosition;
+    }
+    else{
+    	texCoord = vPosition;
+    	color = vec4(1.0,0.0,0.0,1.0);
+    	gl_Position = Projection*CameraView*ModelView*vPosition;
+   }
+   
 }

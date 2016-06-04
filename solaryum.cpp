@@ -12,8 +12,8 @@ using namespace std;
 
 const int NumTimesToSubdivide = 5;
 const int NumTriangles        = 4096;  // (4 faces)^(NumTimesToSubdivide + 1)
-const int NumPlanet           = 13;
-const int NumVertices         = 3 * NumTriangles * NumPlanet;
+const int NumPlanet           = 12;
+const int NumVertices         = 3 * NumTriangles;
 
 
 typedef Angel::vec4 point4;
@@ -23,15 +23,14 @@ float pi = 3.14159265;
 GLfloat yaw    = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right (due to how Eular angles work) so we initially rotate a bit to the left.
 GLfloat pitch  =  0.0f;
 
-glm::vec3 cameraPos   = glm::vec3(0.0, -5.0,  5.0);
-glm::vec3 cameraFront = glm::vec3(0.0, 1.0, -1.0);
+glm::vec3 cameraPos   = glm::vec3(0.0, -5.0,  20.0);
+glm::vec3 cameraFront = glm::vec3(0.0, 1.0, -4.0);
 glm::vec3 cameraUp    = glm::vec3(0.0, 1.0,  0.0);
 
 void timer(int p);
 void keyboard(unsigned char k, int x, int y);
 
-point4 points[NumVertices];
-point4 point[NumPlanet][3*NumTriangles];
+point4 points[NumVertices + 6];
 vec3   normals[NumVertices];
 
 mat4 modelView[NumPlanet];
@@ -39,13 +38,20 @@ GLubyte** imageGeneral; //*imageMercure;
 int width[NumPlanet], height[NumPlanet];
 
 
+int old_x;
+int old_y;
+int valid=0;
+int firstMouse = 1;
+
 int mouseX;
 int mouseY;
-int anim_count = 0, anim = 0, lastSelection = 1;
+
 double changeUnit = 0;
 double lastZoom;
+double wid, heig;
+GLubyte* imageSpace;
 double rotationSpeed = 100, lastSpeed = rotationSpeed, initSpeed = rotationSpeed;
-bool projection = false;
+bool projection = true;
 
 enum { Xaxis = 0,
 	Yaxis = 1,
@@ -53,12 +59,13 @@ enum { Xaxis = 0,
 	NumAxes = 3 };
 
 enum PLANETS{
-	Space = 0, Sun, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, SaturnRing, Moon
+	Sun = 0, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, SaturnRing, Moon
 };
 int Axis = Xaxis;
 GLfloat Theta[NumAxes] = { -90, 0, 0 };
 
 double zoomFactor = 0.03;
+int anim_count = 0, anim = 0, lastSelection = Sun;
 // Model-view and projection matrices uniform location
 GLuint  CameraView, ModelView, Projection, Lighting, index, program;
 
@@ -75,27 +82,64 @@ const char* textureNames[NumPlanet];
 //----------------------------------------------------------------------------
 
 int Index = 0;
-int localIndex = 0;
 
-void
-triangle( const point4& a, const point4& b, const point4& c, int rank )
-{
+void readPPM(){
+	FILE *fin;
+	char tempstr[1024];
+	fin = fopen("space.ppm", "rb");
+	if (fin == NULL){
+		cout << "Input file not found" << endl;
+		return;
+	}
+	// First two lines are unnecessary
+	int maxLevel;
+
+	//fgets(tempstr, 1024, fin);
+	int wi, he;
+
+	fgets(tempstr, 1024, fin);
+	fgets(tempstr, 1024, fin);
+	sscanf(tempstr, "%d %d", &wi, &he);
+	fgets(tempstr, 1024, fin);
+	sscanf(tempstr, "%d", &maxLevel);
+
+	imageSpace = (GLubyte*)malloc(sizeof(GLubyte) * wi * he * 3);
+
+	GLubyte image[wi][he][3];
+
+	char aByte;
+	for (int i = 0;i<wi;i++){
+		for(int j = 0; j <he;j++){
+			for (int c = 0; c < 3; c++){
+				aByte =  fgetc(fin);
+				image[wi-i-1][j][c] = aByte;
+			}
+		}
+	}
+	fclose(fin);
+	int i,j,c;
+	for (i = 0;i<wi;i++){
+		for(j = 0; j <he;j++){
+			for (c = 0; c < 3; c++){
+				imageSpace[3*he*i+3*j+c] = image[i][j][c];
+			}
+		}
+	}
+
+	wid = wi;
+	heig = he;
+}
+
+void triangle( const point4& a, const point4& b, const point4& c){
 	vec3  normal = normalize( cross(b - a, c - b) );
 
 	normals[Index] = normal;  points[Index] = a;  Index++;
 	normals[Index] = normal;  points[Index] = b;  Index++;
 	normals[Index] = normal;  points[Index] = c;  Index++;
 
-	point[rank][localIndex] = a; localIndex++;
-	point[rank][localIndex] = b; localIndex++;
-	point[rank][localIndex] = c; localIndex++;
 }
 
-//----------------------------------------------------------------------------
-
-point4
-unit( const point4& p )
-{
+point4 unit( const point4& p ){
 	float len = p.x*p.x + p.y*p.y + p.z*p.z;
 
 	point4 t;
@@ -107,27 +151,22 @@ unit( const point4& p )
 	return t;
 }
 
-void
-divide_triangle( const point4& a, const point4& b,
-		const point4& c, int count, int rank )
-{
+void divide_triangle( const point4& a, const point4& b, const point4& c, int count){
 	if ( count > 0 ) {
 		point4 v1 = unit( a + b );
 		point4 v2 = unit( a + c );
 		point4 v3 = unit( b + c );
-		divide_triangle(  a, v1, v2, count - 1, rank );
-		divide_triangle(  c, v2, v3, count - 1, rank );
-		divide_triangle(  b, v3, v1, count - 1, rank );
-		divide_triangle( v1, v3, v2, count - 1, rank );
+		divide_triangle(  a, v1, v2, count - 1);
+		divide_triangle(  c, v2, v3, count - 1);
+		divide_triangle(  b, v3, v1, count - 1);
+		divide_triangle( v1, v3, v2, count - 1);
 	}
 	else {
-		triangle( a, b, c, rank );
+		triangle( a, b, c);
 	}
 }
 
-void
-tetrahedron( int count, int rank )
-{
+void tetrahedron( int count){
 	point4 v[4] = {
 			vec4( 0.0, 0.0, 1.0, 1.0 ),
 			vec4( 0.0, 0.942809, -0.333333, 1.0 ),
@@ -135,24 +174,20 @@ tetrahedron( int count, int rank )
 			vec4( 0.816497, -0.471405, -0.333333, 1.0 )
 	};
 
-	divide_triangle( v[0], v[1], v[2], count, rank );
-	divide_triangle( v[3], v[2], v[1], count, rank );
-	divide_triangle( v[0], v[3], v[1], count, rank );
-	divide_triangle( v[0], v[2], v[3], count, rank );
-
+	divide_triangle( v[0], v[1], v[2], count);
+	divide_triangle( v[3], v[2], v[1], count);
+	divide_triangle( v[0], v[3], v[1], count);
+	divide_triangle( v[0], v[2], v[3], count);
 }
 
 void createPlanet(double radius, double distanceFromSun, int rank, const char* textureName){
-	localIndex = 0;
-	tetrahedron( NumTimesToSubdivide, rank );
+	Index = 0;
 
 	translate[rank] = distanceFromSun;
 
 	vec3 displacement(distanceFromSun, 0, 0); //displacement for each cube to seperate.
 	mat4 model_view;
 
-	if (rank == Space)
-		displacement = vec3(200, 2500, distanceFromSun);
 
 	mat4 scale;
 	if(rank == SaturnRing)
@@ -218,58 +253,86 @@ void createPlanet(double radius, double distanceFromSun, int rank, const char* t
 //----------------------------------------------------------------------------
 
 // OpenGL initialization
-void
-init(){
+void init(){
+	// Create a vertex array object
+	readPPM();
+	GLuint vao;
+	glGenVertexArrays( 1, &vao );
+	glBindVertexArray( vao );
+	double screenX = glutGet(GLUT_WINDOW_WIDTH)/2;
+	double screenY = glutGet(GLUT_WINDOW_HEIGHT)/2;
 
-	distances[0] = -4000; distances[1] = 0; distances[2] = 0.57+0.038+1; distances[3] = 1.08+0.57+0.038+1;
-	distances[4] = 1.08+0.57+0.038+1+1.50; distances[5] = 2.28+1.08+0.57+0.038+1+1.50;
-	distances[6] = 7.79+2.28+1.08+0.57+0.038+1+1.50; distances[7] = 14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
-	distances[8] = 28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1; distances[9] = 45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
-	distances[10] = 59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50; distances[11] = distances[7]; distances[12] = 1.08+0.57+0.038+1+1.50 + 0.1 + 0.2;
+	vec4 vertices[6];
+	vertices[0] = vec4(-1.0, -1.0, 0.0, 1.0);
+	vertices[1] = vec4(-1.0, 1.0, 0.0, 1.0);
+	vertices[2] = vec4(1.0, 1.0, 0.0, 1.0);
+	vertices[3] = vec4(1.0, -1.0, 0.0, 1.0);
+	vertices[4] = vec4(-1.0, -1.0, 0.0, 1.0);
+	vertices[5] = vec4(1.0, 1.0, 0.0, 1.0);
 
-	sunTurn[0] = 0; sunTurn[1] = 0; sunTurn[2] = 87.97; sunTurn[3] = 224.7; sunTurn[4] = 365.26; sunTurn[5] = 686.98; sunTurn[6] = 4331.98;
-	sunTurn[7] = 10760.56; sunTurn[8] = 30707.41; sunTurn[9] = 60202.15; sunTurn[10] = 90803.64; sunTurn[11] = sunTurn[7]; sunTurn[12] = sunTurn[4];
+	//	point
 
-	ownTurn[0] = 0; ownTurn[1] = 28; ownTurn[2] = 58.65; ownTurn[3] = 243.01; ownTurn[4] = 1; ownTurn[5] = 1.0257; ownTurn[6] = 0.414;
-	ownTurn[7] = 0.444; ownTurn[8] = 0.718; ownTurn[9] = 0.671; ownTurn[10] = 6.39; ownTurn[11] = ownTurn[7]; ownTurn[12] = 27.32;
+	//	distances[0] = -4000;
 
-	inclination[0] = 0; inclination[1] = 0; inclination[2] = 0; inclination[3] = 178; inclination[4] = 23.4; inclination[5] = 25; inclination[6] = 3.08;
-	inclination[7] = 26.7; inclination[8] = 97.9; inclination[9] = 26.9; inclination[10] = 122.5; inclination[11] = inclination[7]; inclination[12] = 0;
+	distances[Sun] = 0; distances[Mercury] = 0.57+0.038+1; distances[Venus] = 1.08+0.57+0.038+1;
+	distances[Earth] = 1.08+0.57+0.038+1+1.50; distances[Mars] = 2.28+1.08+0.57+0.038+1+1.50;
+	distances[Jupiter] = 7.79+2.28+1.08+0.57+0.038+1+1.50; distances[Saturn] = 14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
+	distances[Uranus] = 28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1; distances[Neptune] = 45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50;
+	distances[Pluto] = 59.10+45.50+28.80+14.30+7.79+2.28+1.08+0.57+0.038+1+1.50; distances[SaturnRing] = distances[Saturn]; distances[Moon] = 1.08+0.57+0.038+1+1.50 + 0.1 + 0.2;
 
-	radiuses[Space] = 3000.0; radiuses[Sun] = 1.5; radiuses[Mercury] = 0.038; radiuses[Venus] = 0.095; radiuses[Earth] = 0.1; radiuses[Moon] = 0.027;
+	sunTurn[Sun] = 0; sunTurn[Mercury] = 87.97; sunTurn[Venus] = 224.7; sunTurn[Earth] = 365.26; sunTurn[Mars] = 686.98; sunTurn[Jupiter] = 4331.98;
+	sunTurn[Saturn] = 10760.56; sunTurn[Uranus] = 30707.41; sunTurn[Neptune] = 60202.15; sunTurn[Pluto] = 90803.64; sunTurn[SaturnRing] = sunTurn[Saturn];
+	sunTurn[Moon] = sunTurn[Earth];
+
+	ownTurn[Sun] = 28; ownTurn[Mercury] = 58.65; ownTurn[Venus] = 243.01; ownTurn[Earth] = 1; ownTurn[Mars] = 1.0257; ownTurn[Jupiter] = 0.414;
+	ownTurn[Saturn] = 0.444; ownTurn[Uranus] = 0.718; ownTurn[Neptune] = 0.671; ownTurn[Pluto] = 6.39; ownTurn[SaturnRing] = ownTurn[Saturn]; ownTurn[Moon] = 27.32;
+
+	inclination[Sun] = 0; inclination[Mercury] = 0; inclination[Venus] = 178; inclination[Earth] = 23.4; inclination[Mars] = 25; inclination[Jupiter] = 3.08;
+	inclination[Saturn] = 26.7; inclination[Uranus] = 97.9; inclination[Neptune] = 26.9; inclination[Pluto] = 122.5; inclination[SaturnRing] = inclination[Saturn];
+	inclination[Moon] = 0;
+
+	radiuses[Sun] = 1.5; radiuses[Mercury] = 0.038; radiuses[Venus] = 0.095; radiuses[Earth] = 0.1; radiuses[Moon] = 0.027;
 	radiuses[Mars] = 0.053; radiuses[Jupiter] = 1.119; radiuses[Saturn] = 0.940; radiuses[Uranus] = 0.404; radiuses[Neptune] = 0.388; radiuses[Pluto] = 0.018;
 	radiuses[SaturnRing] = 0.940;
 
-	textureNames[Space] = "space.ppm"; textureNames[Sun] = "sunmap.ppm"; textureNames[Mercury] = "mercurymap.ppm"; textureNames[Venus] = "venusmap.ppm";
+	//textureNames[Space] = "space.ppm";
+	textureNames[Sun] = "sunmap.ppm"; textureNames[Mercury] = "mercurymap.ppm"; textureNames[Venus] = "venusmap.ppm";
 	textureNames[Earth] = "earthmap1k.ppm"; textureNames[Moon] = "mooooon.ppm"; textureNames[Mars] = "mars_1k_color.ppm"; textureNames[Jupiter] = "jupitermap.ppm";
 	textureNames[Saturn] = "saturn.ppm"; textureNames[Uranus] = "uranusmap.ppm"; textureNames[Neptune] = "neptunemap.ppm"; textureNames[Pluto] = "plutomap1k.ppm";
 	textureNames[SaturnRing] = "saturnring.ppm";
 
 
+	tetrahedron( NumTimesToSubdivide);
+
 	imageGeneral = (GLubyte**) malloc(sizeof(GLubyte*) * NumPlanet);
 	for(int i = 0; i < NumPlanet; i++)
 		createPlanet(radiuses[i], distances[i], i, textureNames[i]);
 
-	// Create a vertex array object
-	GLuint vao;
-	glGenVertexArrays( 1, &vao );
-	glBindVertexArray( vao );
+
 
 	GLintptr offset = 0;
+
+	double sizeY = 1;
+	double sizeX = sizeY * screenX / screenY;
+
+	points[NumVertices] = vec4(-sizeX, -sizeY, 0.0, 1.0);
+	points[NumVertices + 1] = vec4(-sizeX, sizeY, 0.0, 1.0);
+	points[NumVertices + 2] = vec4(sizeX, sizeY, 0.0, 1.0);
+	points[NumVertices + 3] = vec4(sizeX, -sizeY, 0.0, 1.0);
+	points[NumVertices + 4] = vec4(-sizeX, -sizeY, 0.0, 1.0);
+	points[NumVertices + 5] = vec4(sizeX, sizeY, 0.0, 1.0);
 
 	GLuint buffer;
 	glGenBuffers( 1, &buffer );
 	glBindBuffer( GL_ARRAY_BUFFER, buffer );
-	glBufferData( GL_ARRAY_BUFFER, sizeof(points) + sizeof(normals) + sizeof(point), NULL, GL_STATIC_DRAW );
+	glBufferData( GL_ARRAY_BUFFER, sizeof(points) + sizeof(normals), NULL, GL_STATIC_DRAW );
+
+	//glBufferData( GL_ARRAY_BUFFER, sizeof(vertices), NULL, GL_STATIC_DRAW );
+
 	glBufferSubData( GL_ARRAY_BUFFER, offset, sizeof(points), points );
 	offset+= sizeof(points);
 	glBufferSubData( GL_ARRAY_BUFFER, offset, sizeof(normals), normals );
-	offset += sizeof(normals);
 
-	for(int i = 0; i < NumPlanet; i++){
-		glBufferSubData( GL_ARRAY_BUFFER, offset, sizeof(point[i]), point[i] );
-		offset += sizeof(point[i]);
-	}
 
 
 	// Load shaders and use the resulting shader program
@@ -285,10 +348,10 @@ init(){
 	glVertexAttribPointer( vNormal, 3, GL_FLOAT, GL_FALSE, 0,
 			BUFFER_OFFSET(sizeof(points)) );
 
-	GLuint vTexCoord = glGetAttribLocation( program, "vTexCoord");
-	glEnableVertexAttribArray( vTexCoord );
-	glVertexAttribPointer( vTexCoord, 4, GL_FLOAT, GL_FALSE, 0,
-			BUFFER_OFFSET(sizeof(points) + sizeof(normals)) );
+
+
+	//glVertexAttribPointer( vPosition2, 4, GL_FLOAT, GL_FALSE, 0,
+	//			BUFFER_OFFSET(0) );
 
 
 	// Initialize shader lighting parameters
@@ -322,7 +385,7 @@ init(){
 	Lighting = glGetUniformLocation(program, "lighting");
 	glUniform1i( Lighting, lighting );
 
-	// Retrieve transformation uniform variable locations
+	// Retrieve transformation uniform variable locations*/
 	ModelView = glGetUniformLocation( program, "ModelView" );
 	Projection = glGetUniformLocation( program, "Projection" );
 	CameraView = glGetUniformLocation( program, "CameraView" );
@@ -331,14 +394,14 @@ init(){
 	glEnable(GL_CULL_FACE); //to discard invisible faces from rendering
 	glEnable(GL_STENCIL_TEST);
 
-	glClearColor( 0.0, 0.0, 0.0, 1.0 ); /* black background */
+	glClearColor( 1.0, 1.0, 1.0, 1.0 ); /* black background */
+	glutPostRedisplay();
 }
 
 //----------------------------------------------------------------------------
 
-void
-display( void )
-{
+void display( void ){
+
 	glClearStencil(0);
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
@@ -347,12 +410,23 @@ display( void )
 
 	glm::vec3 target = cameraPos + cameraFront;
 	glm::mat4 cameraView;
+	if(projection){
 
+		double h = glutGet(GLUT_WINDOW_HEIGHT);
+		double w = glutGet(GLUT_WINDOW_WIDTH);
+		mat4  projection;
+		if(w >= h){
+			projection = Ortho(-0.135*cameraPos.z* (GLfloat) w / (GLfloat) h, 0.135 * cameraPos.z* (GLfloat) w / (GLfloat) h, -0.135* cameraPos.z, 0.135* cameraPos.z, -1000.0,1000.0);
+		}
+		else{
+			projection = Ortho(-0.135*cameraPos.z, 0.135*cameraPos.z, -0.135*cameraPos.z * (GLfloat) h / (GLfloat) w, 0.135 *cameraPos.z* (GLfloat) h / (GLfloat) w, -100.0, 100.0);
+		}
 
-	if (projection)
-		cameraView = glm::mat4();
-	else
-		cameraView = glm::lookAt(cameraPos, target, cameraUp);
+		glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
+
+	}
+
+	cameraView = glm::lookAt(cameraPos, target, cameraUp);
 
 	glUniformMatrix4fv(CameraView, 1, GL_FALSE, glm::value_ptr(cameraView));
 	//traverses the model view matrix to global rotate and zoom-in features.
@@ -366,22 +440,15 @@ display( void )
 	glUniform4fv( glGetUniformLocation(program, "LightPosition"), 1, light_position );
 
 
-
 	for (int k = 0; k < NumPlanet; k++) {
 		glUniform1i( glGetUniformLocation(program, "isSun"), 0 );
 		if(k == Sun)
 			glUniform1i( glGetUniformLocation(program, "isSun"), 1 );
 
-		if (k != Space){
-			glStencilFunc(GL_ALWAYS, k,0);
-			if(projection)
-				mm[k] = Scale(zoomFactor, zoomFactor, zoomFactor) * RotateX(Theta[Xaxis]) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) * modelView[k]; //* RotateY(inclination[k]); //global rotate
-			else
-				mm[k] = modelView[k]; //* RotateY(inclination[k]); //global rotate
-		}
-		else{
-			mm[k] = Scale(0.03, 0.03, 0.03) *modelView[k]; //* RotateY(inclination[k]); //global rotate
-		}
+		glStencilFunc(GL_ALWAYS, k,0);
+
+		mm[k] = RotateX(-90) * RotateY(Theta[Yaxis]) * RotateZ(Theta[Zaxis]) * modelView[k];
+
 		glUniformMatrix4fv(ModelView, 1, GL_TRUE, mm[k]);
 
 		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, width[k], height[k] , 0, GL_RGB, GL_UNSIGNED_BYTE, imageGeneral[k]);
@@ -397,35 +464,44 @@ display( void )
 		//  glUniformMatrix4fv(CameraView, 1, GL_TRUE, view);
 
 		glPolygonMode(GL_FRONT, GL_FILL);
-		glDrawArrays(GL_TRIANGLES, k*NumVertices / NumPlanet, NumVertices / NumPlanet);
+		glDrawArrays(GL_TRIANGLES, 0, NumVertices);
 	}
 
-	//glFlush();
+	//if(projection)
+	glUniformMatrix4fv(ModelView, 1, GL_TRUE, Scale(1, 1, 1) * RotateX(-180) * RotateY(0) * RotateZ(0)  * Translate(0,0,-0.999999));
+	//else{
+	//	glUniformMatrix4fv(ModelView, 1, GL_TRUE,  Scale(1, 1, 1)  *  RotateX(-180) * RotateY(0) * RotateZ(0) * Translate(0,0,-0.9999999));
+
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, wid, heig , 0, GL_RGB, GL_UNSIGNED_BYTE, imageSpace);
+
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glActiveTexture( GL_TEXTURE0);
+
+	glUniform1i( glGetUniformLocation(program, "isSpace"), 1);
+	glDrawArrays(GL_TRIANGLES, NumVertices, 6);
+	glUniform1i( glGetUniformLocation(program, "isSpace"), 0);
 	glutSwapBuffers();
 }
 
 //----------------------------------------------------------------------------
 
 
-void
-reshape( int w, int h )
-{
+void reshape( int w, int h ){
 
-	if(projection){
+	//
 
-		glViewport( 0, 0, w, h );
+	glViewport( 0, 0, w, h );
 
-		mat4  projection;
-		if (w <= h)
-			projection = Ortho(-1.0, 1.0, -1.0 * (GLfloat) h / (GLfloat) w,
-					1.0 * (GLfloat) h / (GLfloat) w, -10.0, 10.0);
-		else  projection = Ortho(-1.0* (GLfloat) w / (GLfloat) h, 1.0 *
-				(GLfloat) w / (GLfloat) h, -1.0, 1.0, -10.0, 10.0);
-		glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
-	}
-	else{
-		glViewport( 0, 0, w, h );
 
+	//}
+	//else{
+	//	glViewport( 0, 0, w, h );
+	if(!projection){
 
 		GLfloat aspect;
 		if (w < h){
@@ -435,110 +511,95 @@ reshape( int w, int h )
 			aspect = GLfloat(w)/h;
 		}
 
-
-
 		mat4  projection;
-		projection = Perspective(45.0, aspect, 1.0f, 100.0f);
+		projection = Perspective(15.0, aspect, 0.1, 1000.0f);
 		glUniformMatrix4fv( Projection, 1, GL_TRUE, projection );
-		glutPostRedisplay();
+
 
 	}
+	glutPostRedisplay();
 
 }
 
 //----------------------------------------------------------------------------
 
 //Mouse callback function.
-void mouse( int button, int state, int x, int y )
-{
-	GLfloat cameraSpeed = 0.1f;
+void mouse( int button, int state, int x, int y ){
+
+	GLfloat cameraSpeed = 0.2f;
 	if ( state == GLUT_UP ) {
 		switch( button ) {
 		case 3:
-			if(projection)
-				zoomFactor *= 1.1;
-			else{
-				cameraPos += cameraSpeed * cameraFront;
-			}
+			//if(projection)
+			//	zoomFactor *= 1.1;
+			//else{
+			cameraPos += cameraSpeed * cameraFront;
+			if(cameraPos.z < 0)
+				cameraPos -= cameraSpeed * cameraFront;
+			//	}
 			break; //Scroll-up
 		case 4:
-			if(projection)
-				zoomFactor *= 0.9;
-			else{
-				cameraPos -= cameraSpeed * cameraFront;
+			//	if(projection)
+			//		zoomFactor *= 0.9;
+			//	else{
+			cameraPos -= cameraSpeed * cameraFront;
 
-			}
+			//	}
 			break; //Scroll-down
 		}
 
 		glutPostRedisplay();
 	}
-	else if ( state == GLUT_DOWN && button == GLUT_LEFT_BUTTON) {
-		y = glutGet( GLUT_WINDOW_HEIGHT ) - y;
+	else if ( state == GLUT_DOWN){
+		if(button == GLUT_LEFT_BUTTON) {
+			valid = 0;
+			y = glutGet( GLUT_WINDOW_HEIGHT ) - y;
 
-		unsigned char pixel[4];
-		glReadPixels(x, y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
-		//GLuint index;
-		index = 0;
+			unsigned char pixel[4];
+			glReadPixels(x, y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
+			index = 0;
 
+			if(pixel[0] != pixel[1] || pixel[1] != pixel[2]){
+				glReadPixels(x, y, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &index);
+				changeUnit = -translate[index-1];
 
-		if(pixel[0] != pixel[1] || pixel[1] != pixel[2]){
-			glReadPixels(x, y, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &index);
-			changeUnit = -translate[index-1];
+				if(index == SaturnRing)
+					index = Saturn;
+				int indexReal = index;
 
-			if(index == SaturnRing)
-				index = Saturn;
-			int indexReal = index;
+				if (index != lastSelection){
 
+					//	if(projection){
+					//
+					//						keyboard('*',0,0);
+					//						index = indexReal;
+					//						lastSelection = index;
+					//						zoomFactor = 0.03;
+					//						changeUnit = -translate[index];
+					//						anim_count = anim = 40;
+					//						timer(10);
+					//						lastZoom = zoomFactor;
+					//	}
+					//	else{
+					changeUnit = -translate[index];
+					cameraPos = glm::vec3 (-changeUnit, 7.5 * radiuses[index] / cameraFront.z  , 7.5*radiuses[index]);
+					lastSelection = index;
+					//	}
+				}
 
-
-			for(int i = 1; i < NumPlanet; i++){
-				//	modelView[i] =  modelView[i] * Translate(distances[index],0,0);
+				glutPostRedisplay();
 			}
 
-
-
-			if (index != lastSelection){
-				keyboard('*',0,0);
-				index = indexReal;
-				lastSelection = index;
-				zoomFactor = 0.03;
-				changeUnit = -translate[index];
-				anim_count = anim = 40;
-				timer(10);
-				lastZoom = zoomFactor;
-			}
-
-			glutPostRedisplay();
 		}
+		else if(button == GLUT_RIGHT_BUTTON){
+			old_x = x;
+			old_y = y;
 
-
-
-		/*	if(pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0){
-			glReadPixels(x, y, 1, 1, GL_STENCIL_INDEX, GL_UNSIGNED_INT, &index);
-			changeUnit = -translate[index-1];
-
-			int indexReal = index;
-			if (index != lastSelection){
-				keyboard('*',0,0);
-				index = indexReal;
-				lastSelection = index;
-				zoomFactor = 0.03;
-				changeUnit = -translate[index];
-				anim_count = anim = 40;
-				timer(10);
-				lastZoom = zoomFactor;
-			}
-
-			glutPostRedisplay();
-		}*/
-
+			valid = 1;
+		}
 	}
-
 }
-void specialKeyboard(int k, int x, int y)
-
-{
+void specialKeyboard(int k, int x, int y){
 	if(projection){
 		switch (k) {
 		case GLUT_KEY_LEFT:
@@ -561,7 +622,7 @@ void specialKeyboard(int k, int x, int y)
 
 void keyboard(unsigned char k, int x, int y)
 {
-	GLfloat cameraSpeed = 2;
+	GLfloat cameraSpeed = 1;
 	vec3 displacement;
 	mat4 model_view;
 
@@ -580,19 +641,24 @@ void keyboard(unsigned char k, int x, int y)
 
 		in = k - '0';
 		if (in+1 != lastSelection){
-			keyboard('*',0,0);
+			/*keyboard('*',0,0);
 			lastSelection = in+1;
 			changeUnit = -translate[in+1];
 			index = in+1;
 			anim_count = anim = 40;
 			timer(10);
-			lastZoom = zoomFactor;
+			lastZoom = zoomFactor;*/
+
+			changeUnit = -translate[in];
+			cameraPos = glm::vec3 (-changeUnit, 7.5 * radiuses[in] / cameraFront.z  , 7.5*radiuses[in]);
+			lastSelection = in+1;
+
 
 		}
 
 		break;
 	case '*':
-		changeUnit = -translate[lastSelection];
+		/*changeUnit = -translate[Sun];
 		index = 1;
 
 		for(int i = 1; i < NumPlanet; i++){
@@ -601,7 +667,11 @@ void keyboard(unsigned char k, int x, int y)
 		}
 		zoomFactor = 0.03;
 		lastZoom = zoomFactor;
-		//lastSelection = -1;
+		lastSelection = -1;*/
+		keyboard('0',0,0);
+		cameraPos   = glm::vec3(0.0, -5.0,  20.0);
+		cameraFront = glm::vec3(0.0, 1.0, -4.0);
+		cameraUp    = glm::vec3(0.0, 1.0,  0.0);
 
 		break;
 		//
@@ -609,48 +679,35 @@ void keyboard(unsigned char k, int x, int y)
 		projection = !projection;
 		reshape(glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT));
 
-		if(projection){
-			displacement = vec3(0, 0, -450);
-			model_view =   RotateX(inclination[Space] ) * Translate(displacement) * Scale(200, 200, 200);
-		}
-		else{
-			displacement = vec3(200, 2500, -4000);
-			model_view =   RotateX(inclination[Space] ) * Translate(displacement) * Scale(3000, 3000, 3000);
-		}
-		// Scale(), Translate(), RotateX(), RotateY(), RotateZ(): user-defined functions in mat.h
-
-		modelView[0] = model_view;
-
-
 		break;
 	case 'A':
 	case 'a':   //Initialize the object to default angle.
-		if(!projection){
-			cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
-			modelView[0] = modelView[0] * Translate(0.0111111 * -cameraSpeed,0,0);
-		}
+		//if(!projection){
+		cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
+		//	modelView[Space] = modelView[Space] * Translate(0.0111111 * -cameraSpeed,0,0);
+		//}
 		break;
 	case 'S':
 	case 's': //Initialize the object to default zoom value.
-		if(!projection){
-			cameraPos.y -= cameraSpeed;
-			modelView[0] = modelView[0] * Translate(0,0.0111111 * -cameraSpeed,0);
-		}
+		//if(!projection){
+		cameraPos.y -= cameraSpeed;
+		//	modelView[Space] = modelView[Space] * Translate(0,0.0111111 * -cameraSpeed,0);
+		//}
 		break;
 	case 'W':
 	case 'w': //Initialize the object to default zoom value.
-		if(!projection){
-			cameraPos.y +=  cameraSpeed;
-			modelView[0] = modelView[0] * Translate(0,0.0111111 * cameraSpeed,0);
-		}
+		//if(!projection){
+		cameraPos.y +=  cameraSpeed;
+		//	modelView[Space] = modelView[Space] * Translate(0,0.0111111 * cameraSpeed,0);
+		//}
 
 		break;
 	case 'D':
 	case 'd': //Initialize the object to default zoom value.
-		if(!projection){
-			cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
-			modelView[0] = modelView[0] * Translate(0.0111111 * cameraSpeed,0,0);
-		}
+		//if(!projection){
+		cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
+		//	modelView[Space] = modelView[Space] * Translate(0.0111111 * cameraSpeed,0,0);
+		//}
 		break;
 	case 'L':
 	case 'l':
@@ -678,6 +735,19 @@ void keyboard(unsigned char k, int x, int y)
 			rotationSpeed = 0;
 		break;
 
+	case 'i':
+	case 'I':
+		rotationSpeed = initSpeed;
+		projection = false;
+		keyboard('*',0,0);
+
+		reshape(glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT));
+		//displacement = vec3(200, 2500, -4000);
+		//model_view =   RotateX(inclination[Space] ) * Translate(displacement) * Scale(3000, 3000, 3000);
+
+		//modelView[Space] = model_view;
+
+		break;
 
 	case 'Q':
 	case 'q':
@@ -690,7 +760,7 @@ void keyboard(unsigned char k, int x, int y)
 }
 
 void rotatePlanet(int rank){
-	if (rank != Sun && lastSelection == Sun){
+	if (rank != Sun){
 		modelView[rank] =  RotateZ(-rotationSpeed/sunTurn[rank])*modelView[rank] * RotateZ(rotationSpeed/ownTurn[rank]);
 
 	}
@@ -699,11 +769,10 @@ void rotatePlanet(int rank){
 	//Theta[Yaxis] += speed;
 }
 
-void
-idle( void ){
+void idle( void ){
 
-	for(int i = Sun; i < NumPlanet;i++)
-		//rotatePlanet(i);
+	//for(int i = Sun; i < NumPlanet;i++)
+	//	rotatePlanet(i);
 
 	glutPostRedisplay();
 }
@@ -713,7 +782,7 @@ void timer( int p ){
 		anim_count--;
 
 		for(int i = Sun; i < NumPlanet; i++){
-			modelView[i] = Translate((changeUnit/anim), 0, 0) * modelView[i];
+			modelView[i] = Translate((changeUnit/anim), 0, 0) * modelView[i];// * RotateZ(rotationSpeed/(sunTurn[i]*anim));
 			translate[i] = (changeUnit/anim) + translate[i];
 		}
 		if (1 / radiuses[index-1] > lastZoom){
@@ -729,11 +798,37 @@ void timer( int p ){
 	//	zoomFactor = 1/radiuses[index-1];
 }
 
+void mouseDrag (int x , int y){
+	//cout << glm::to_string(cameraPos) << endl;
+	if (valid) {
+
+		int xoffset = old_x - x;
+		int yoffset = old_y - y;
+		GLfloat sensitivity = 0.05f;
+		xoffset *= sensitivity;
+		yoffset *= sensitivity;
+
+		yaw   += xoffset;
+		pitch += yoffset;
 
 
-int
-main( int argc, char **argv )
-{
+		glm::vec3 front;
+		front.x = cos(glm::radians(pitch)) * cos(glm::radians(yaw));
+		front.y = -sin(glm::radians(pitch));
+
+		front.z = cos(glm::radians(pitch)) * sin(glm::radians(yaw));
+		cameraFront = glm::normalize(front);
+
+
+		old_x = x;
+		old_y = y;
+	}
+	glutPostRedisplay();
+
+
+}
+
+int main( int argc, char **argv ){
 
 	glutInit( &argc, argv );
 	glutInitDisplayMode( GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH );
@@ -741,6 +836,11 @@ main( int argc, char **argv )
 	glutCreateWindow( "Solar System" );
 	glewExperimental = GL_TRUE;
 	glewInit();
+
+	old_x = glutGet(GLUT_WINDOW_WIDTH)/2;
+	old_y = glutGet(GLUT_WINDOW_HEIGHT)/2;
+
+
 	init();
 
 	glutMouseFunc( mouse );// set mouse callback function for mouse
@@ -749,6 +849,7 @@ main( int argc, char **argv )
 	glutReshapeFunc( reshape );
 	glutKeyboardFunc( keyboard );
 	glutIdleFunc( idle );
+	glutMotionFunc(mouseDrag);
 
 	glutMainLoop();
 	for(int i; i < NumPlanet; i++){
