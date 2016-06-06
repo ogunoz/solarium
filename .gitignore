@@ -1,5 +1,6 @@
 *
 !solaryum.cpp
+!solar3D.h
 !vshader.glsl
 !fshader.glsl
 !*.ppm

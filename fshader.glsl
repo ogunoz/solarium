@@ -11,7 +11,6 @@ uniform int isSun;
 uniform int isSpace;
 
 uniform int lighting;
-varying vec4 color;
 
 uniform sampler2D texture;
 varying  vec4 texCoord;

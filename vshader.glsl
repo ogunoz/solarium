@@ -17,7 +17,6 @@ uniform int isSpace;
 uniform int lighting;
 
 varying vec4 texCoord;
-varying vec4 color;
 
 void main()
 {
@@ -34,17 +33,11 @@ void main()
         }
     }
 
-   color = vec4(0.0, 0.0, 1.0, 1.0);
-    if (isSpace == 1){
-    	texCoord = vPosition;
-    	color = vec4(0.0,1.0,0.0,1.0);
-    	
+   texCoord = vPosition;
+    if (isSpace == 1)
     	gl_Position = ModelView*vPosition;
-    }
-    else{
-    	texCoord = vPosition;
-    	color = vec4(1.0,0.0,0.0,1.0);
+    else
     	gl_Position = Projection*CameraView*ModelView*vPosition;
-   }
+   
    
 }
